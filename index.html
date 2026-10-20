@@ -1081,7 +1081,7 @@ async function ensureMic(){
     const src=c.createMediaStreamSource(stream), node=new AudioWorkletNode(c,'pocket-onset',{numberOfInputs:2, processorOptions:Object.assign(sensParams(), {kc:coupling})}), z=c.createGain(); z.gain.value=0;
     src.connect(node).connect(z).connect(c.destination);
     node.port.postMessage(sensParams());
-    node.port.onmessage=e=>{ const m=e.data; if(m.k==='on') onHit(m.t, 'mic'); else if(m.k==='cpl') gotCoupling(m.v); else showLevel(m.v); };
+    node.port.onmessage=e=>{ const m=e.data; if(m.k==='on') onHit(m.t, 'mic', m.v); else if(m.k==='cpl') gotCoupling(m.v); else showLevel(m.v); };
     mic={stream, src, node, aec};
     connectRef();
     return true;
@@ -1112,10 +1112,10 @@ document.addEventListener('keydown', e=>{
   if(e.code==='Space' && S.input==='tap' && ctx && (run||cal) && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); if(!e.repeat) onHit(tapTime(e),'tap'); }
 });
 
-function onHit(ctxT, src){
+function onHit(ctxT, src, v){
   if(src!==S.input) return;
   if(cal){ calHit(ctxT); return; }
-  if(run){ runHit(ctxT); return; }
+  if(run){ runHit(ctxT, v); return; }
   heardN++; $('#heard').textContent='Heard '+heardN+' strum'+(heardN===1?'':'s')+'. If it misses strums, raise the sensitivity; if it hears noise, lower it.';
 }
 
@@ -1137,7 +1137,7 @@ async function startRun(from){
   src.buffer=song.buffer; gain.gain.value=S.songVol; src.connect(gain).connect(busNode);
   const T0=c.currentTime+0.25; src.start(T0+(playFrom-startPos), playFrom);
   if(mic) connectRef();
-  run={src, gain, T0, startPos, countStart, ...part, lat:curLatency(), dots:[], extras:0, early:0, nextBeat:Math.ceil(beatIdx(startPos)-1e-6), timer:0, raf:0, lastHit:null, recent:[], lit:-1};
+  run={src, gain, T0, startPos, countStart, ...part, lat:curLatency(), dots:[], extras:0, early:0, nextBeat:Math.ceil(beatIdx(startPos)-1e-6), timer:0, raf:0, lastHit:null, recent:[], lit:-1, ambient:[]};
   renderBeatLights();
   run.learning = S.input==='mic' && S.output==='speaker' && !!mic;
   if(run.learning) mic.node.port.postMessage({cmd:'learnStart'});
@@ -1168,7 +1168,14 @@ function schedule(){
     run.nextBeat++;
   }
 }
-function runHit(ctxT){
+// A real strum is much louder than the room's small noises (typing, moving, a fan). Before the count-in Pocket
+// collects how loud those stray sounds are, and in the count-in bar only something clearly louder counts as
+// coming in early. (Taps have no loudness, so they always count.)
+function clearlyAboveRoom(v){
+  const a=run.ambient; if(v==null || a.length<3) return true;
+  const m=a.slice().sort((x,y)=>x-y)[a.length>>1]; return v >= m*3;
+}
+function runHit(ctxT, v){
   const t=songAt(ctxT)-run.lat, ev=run.ev;
   let lo=0, hi=ev.length; while(lo<hi){ const m=(lo+hi)>>1; if(ev[m].t<t) lo=m+1; else hi=m; }
   let best=null, bd=1e9;
@@ -1177,7 +1184,9 @@ function runHit(ctxT){
     best.hit=true; best.miss=false; best.d=t-best.t; best.g=grade(best.d);
     run.dots.push({t, g:best.g}); run.recent.push(best.d); if(run.recent.length>8) run.recent.shift();
     setNeedle(best.d, best.g); updateTrend(); updateOrb(true);
-  } else if(t < run.start-0.12 && t > run.countStart-G().bar*0.2){
+  } else if(t < run.countStart-G().bar*0.2){
+    if(v!=null){ run.ambient.push(v); if(run.ambient.length>40) run.ambient.shift(); }
+  } else if(t < run.start-0.12 && clearlyAboveRoom(v)){
     run.early++; run.dots.push({t, g:'bad'}); flash('Wait for it', 'Bar '+S.entryBar+' is where you come in');
   } else if(t>=run.start-0.12 && t<=run.end+0.2){
     run.extras++; run.dots.push({t, g:'extra'});
