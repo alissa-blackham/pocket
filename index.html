@@ -902,9 +902,8 @@ const PRESETS=[
   {name:'Country Roads', p:'D-DU-UDU', bpb:4, sub:2, chords:'G | Em | D | C'},
 ];
 $('#presets').innerHTML=PRESETS.map((p,i)=>`<button class="chip" data-preset="${i}">${p.name}</button>`).join('');
-$$('[data-preset]').forEach(b=>b.addEventListener('click', ()=>{ const p=PRESETS[+b.dataset.preset]; S.pattern=p.p; S.beatsPerBar=p.bpb; S.subdiv=p.sub; refreshAll(); savePrefs(); }));
-S.subdiv=p.sub; if(p.chords) S.chords=p.chords;
-  
+$$('[data-preset]').forEach(b=>b.addEventListener('click', ()=>{ const p=PRESETS[+b.dataset.preset]; S.pattern=p.p; S.beatsPerBar=p.bpb; S.subdiv=p.sub; if(p.chords) S.chords=p.chords; refreshAll(); savePrefs(); }));
+
 function countLabels(){
   const sub={2:['&'],3:['trip','let'],4:['e','&','a']}[S.subdiv]||[];
   const out=[]; for(let b=1;b<=S.beatsPerBar;b++){ out.push(String(b)); sub.forEach(s=>out.push(s)); } return out;
