@@ -1,3 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Pocket</title>
+<meta name="description" content="Guitar timing coach: counts you in to a song and tells you when you drift off the beat.">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#111317">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column of panels like a pedalboard; step 3 is a stage with a scrolling strum lane and a timing needle */
+:root{
+  --bg:#eceef1; --panel:#ffffff; --ink:#15181d; --muted:#5b6470; --line:#d3d8de;
+  --amber:#EABEC3; --amber-soft:#F5DDE0; --blue:#1f6fe0; --good:#0f8a5c; --warn:#b06a00; --bad:#c62f38; --lane:#f6f7f9;
+  --f-display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --f-body:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#111317; --panel:#1a1d23; --ink:#eef0f3; --muted:#9aa3ae; --line:#2c313a;
+  --amber:#ffb02e; --amber-soft:#3a2b12; --blue:#52a8ff; --good:#3ddc84; --warn:#ffb02e; --bad:#ff6363; --lane:#15181d; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111317; --panel:#1a1d23; --ink:#eef0f3; --muted:#9aa3ae; --line:#2c313a;
+  --amber:#ffb02e; --amber-soft:#3a2b12; --blue:#52a8ff; --good:#3ddc84; --warn:#ffb02e; --bad:#ff6363; --lane:#15181d; color-scheme:dark}
+
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.5 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  padding-block:max(12px,env(safe-area-inset-top,0px)) max(32px,env(safe-area-inset-bottom,0px));-webkit-tap-highlight-color:transparent}
+.page{max-width:720px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+h1{font:800 2.4rem/1 var(--f-display);letter-spacing:.02em;margin:0;text-transform:uppercase}
+.top{display:flex;flex-direction:column;gap:4px;padding-top:6px}
+.brand{display:flex;align-items:center;gap:10px}
+.logo{width:28px;height:28px;border-radius:50%;border:3px solid var(--amber);position:relative;flex:none}
+.logo::after{content:"";position:absolute;left:50%;top:-3px;bottom:50%;width:3px;margin-left:-1.5px;background:var(--amber);transform-origin:50% 100%;transform:rotate(18deg)}
+.tag{margin:0;color:var(--muted);max-width:60ch}
+.eyebrow{font:600 .72rem/1.2 var(--f-body);text-transform:uppercase;letter-spacing:.12em;color:var(--muted)}
+.muted{color:var(--muted)} .small{font-size:.85rem} .mono{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+p{margin:0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:10px;min-width:0}
+.row{display:flex;align-items:center} .between{justify-content:space-between;gap:12px} .gap{gap:8px} .wrap-row,.row.wrap{flex-wrap:wrap}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field>label{font-weight:600;font-size:.9rem}
+
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:6px}
+.steps button{font:600 .95rem var(--f-body);color:var(--muted);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 6px;cursor:pointer}
+.steps button b{font-family:var(--f-mono);font-weight:500;margin-right:4px}
+.steps button[aria-selected="true"]{color:var(--ink);border-color:var(--amber);box-shadow:inset 0 -3px 0 var(--amber)}
+
+.btn{font:600 .95rem var(--f-body);color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px;cursor:pointer;white-space:nowrap;text-align:center;touch-action:manipulation}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#16110a}
+.btn.big{font-size:1.1rem;padding:14px 18px}
+.btn.wide{width:100%}
+.btn.stop{background:var(--bad);border-color:var(--bad);color:#fff}
+.chip{font:500 .85rem var(--f-body);color:var(--ink);background:transparent;border:1px solid var(--line);border-radius:999px;padding:6px 11px;cursor:pointer;touch-action:manipulation}
+.chip:hover{border-color:var(--muted)}
+.chip.on{border-color:var(--amber);background:var(--amber-soft)}
+button:focus-visible,input:focus-visible,select:focus-visible,label.btn:focus-within{outline:2px solid var(--amber);outline-offset:2px}
+input[type=number],input[type=text],select{font:500 1rem var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
+.stepper{display:grid;grid-template-columns:44px 1fr 44px;gap:6px}
+.stepper button{font:600 1.2rem var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;cursor:pointer;touch-action:manipulation}
+.stepper input{text-align:center;font-family:var(--f-mono)}
+.check{display:flex;align-items:center;gap:8px;font-size:.92rem;cursor:pointer}
+.check input{width:18px;height:18px;accent-color:var(--amber)}
+.seg{display:inline-grid;grid-auto-flow:column;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{font:600 .9rem var(--f-body);background:transparent;color:var(--muted);border:0;padding:8px 14px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--amber-soft);color:var(--ink)}
+
+.searchrow{display:grid;grid-template-columns:1fr auto;gap:8px}
+input[type=search]{font:500 1rem var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0;width:100%}
+.results{display:flex;flex-direction:column;gap:2px;max-height:360px;overflow-y:auto;overflow-x:hidden;min-width:0}
+.results:empty{display:none}
+.result{display:grid;width:100%;grid-template-columns:48px minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;background:transparent;border:1px solid transparent;border-radius:8px;padding:6px;color:var(--ink);font:inherit;cursor:pointer;min-width:0}
+.result:hover{border-color:var(--line)}
+.result.on{border-color:var(--amber);background:var(--amber-soft)}
+.result img{border-radius:4px;background:var(--bg);display:block}
+.rt{display:flex;flex-direction:column;min-width:0}
+.rt b,.rt span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rt span{font-size:.85rem;color:var(--muted)}
+.rd{font-size:.8rem;color:var(--muted)}
+.nowloaded{display:flex;gap:12px;align-items:center;min-width:0}
+.nowloaded img{border-radius:6px;flex:none}
+.songname{font:800 1.6rem/1.1 var(--f-display);letter-spacing:.01em;overflow-wrap:anywhere}
+.wave-scroll{position:relative;overflow-x:auto;overflow-y:hidden;height:110px;border-radius:8px;background:var(--lane);border:1px solid var(--line);touch-action:pan-x;cursor:pointer}
+.wave-spacer{height:1px}
+#wave{position:sticky;left:0;top:0;display:block;height:108px;width:100%;margin-top:-1px}
+.tapbox{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.tapbox .small{flex:1;min-width:200px}
+
+.patin{font:500 1.5rem/1 var(--f-mono)!important;letter-spacing:.25em;text-transform:uppercase}
+.patgrid{display:grid;gap:3px;overflow-x:auto;padding-bottom:2px}
+.cell{display:flex;flex-direction:column;align-items:center;gap:2px;padding:6px 0;border-radius:6px;background:var(--bg);min-width:28px}
+.cell .cnt{font:500 .72rem var(--f-mono);color:var(--muted)}
+.cell .gl{font:600 1.2rem/1 var(--f-body);height:1.3rem}
+.cell.beat{background:var(--amber-soft)}
+.cell.beat .cnt{color:var(--ink)}
+.warnline{color:var(--warn);font-size:.88rem}
+.chordrow{display:flex;flex-wrap:wrap;gap:6px}
+.chordrow span{font:700 1.05rem var(--f-body);border:1px solid var(--line);border-radius:6px;padding:4px 10px}
+.chordrow span small{font:500 .7rem var(--f-mono);color:var(--muted);margin-right:6px}
+
+.note{border:1px solid var(--line);border-left:4px solid var(--amber);border-radius:8px;padding:10px 12px;background:var(--panel);font-size:.9rem}
+.stage{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;display:grid;grid-template-columns:1fr auto;gap:12px;user-select:none;-webkit-user-select:none}
+.status{min-width:0}
+.stbig{font:800 clamp(2.4rem,11vw,4.2rem)/1 var(--f-display);text-transform:uppercase;letter-spacing:.01em;margin-top:4px;overflow-wrap:anywhere}
+.stbig.go{color:var(--good)} .stbig.count{color:var(--amber)} .stbig.alert{color:var(--bad)}
+.beatlights{display:flex;gap:8px;margin-top:10px}
+.beatlights span{width:14px;height:14px;border-radius:50%;background:var(--line);transition:background .06s,transform .06s}
+.beatlights span.one{width:18px;height:18px;margin-top:-2px}
+.beatlights span.on{background:var(--amber);transform:scale(1.15)}
+.beatlights span.on.one{background:var(--ink)}
+.stsub{color:var(--muted);margin-top:4px;min-height:1.5em}
+/* timing light: blue = perfect, green = good, amber = off, red = restart */
+.orb{--c:var(--muted);width:clamp(150px,46vw,200px);margin:18px;aspect-ratio:1;max-width:100%;border-radius:50%;border:3px solid var(--line);padding:0;font:inherit;color:var(--ink);cursor:default;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;align-self:center;
+  background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--c) 14%,var(--panel)) 0%,var(--panel) 72%);
+  transition:border-color .3s,box-shadow .4s,background .4s}
+.orb[data-state="perfect"]{--c:var(--blue)} .orb[data-state="good"]{--c:var(--good)} .orb[data-state="ok"]{--c:var(--warn)} .orb[data-state="bad"]{--c:var(--bad);cursor:pointer}
+.orb:not([data-state="idle"]){border-color:var(--c);
+  background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--c) 55%,var(--panel)) 0%,color-mix(in srgb,var(--c) 22%,var(--panel)) 72%);
+  box-shadow:0 0 30px 8px color-mix(in srgb,var(--c) 70%,transparent),0 0 90px 30px color-mix(in srgb,var(--c) 32%,transparent)}
+.orb.pulse{animation:orbPulse .3s ease-out}
+@keyframes orbPulse{from{transform:scale(1.07)}to{transform:scale(1)}}
+.orb-word{font:700 .8rem/1 var(--f-body);text-transform:uppercase;letter-spacing:.14em}
+.orb:not([data-state="idle"]) .orb-word{color:var(--ink)}
+.orb-word{color:var(--muted)}
+.orb-chord{font:800 3rem/1 var(--f-display);max-width:86%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.orb-next{font-size:.8rem;color:var(--muted)}
+.orb:not([data-state="idle"]) .orb-next{color:var(--ink);opacity:.75}
+#lane{grid-column:1/-1;width:100%;height:170px;display:block;border-radius:8px;background:var(--lane);touch-action:manipulation}
+.meter{grid-column:1/-1;display:flex;flex-direction:column;gap:6px}
+.mlabels{display:flex;justify-content:space-between;font:500 .72rem var(--f-mono);color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+.mtrack{position:relative;height:30px;border-radius:6px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.zone{position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%)}
+.zone.ok{background:color-mix(in srgb,var(--warn) 22%,transparent)}
+.zone.tight{background:color-mix(in srgb,var(--good) 30%,transparent)}
+.mtrack::after{content:"";position:absolute;left:50%;top:0;bottom:0;width:1px;background:var(--muted)}
+.needle{position:absolute;top:2px;bottom:2px;width:6px;margin-left:-3px;left:50%;border-radius:3px;background:var(--ink);transition:left .12s ease-out,background .12s;opacity:.25}
+.mread{display:flex;justify-content:space-between;align-items:center;gap:8px}
+#mReading{font-size:1.1rem}
+.pill{font:600 .85rem var(--f-body);border-radius:999px;padding:4px 12px;border:1px solid var(--line);color:var(--muted)}
 .pill.good{color:var(--good);border-color:var(--good)} .pill.warn{color:var(--warn);border-color:var(--warn)} .pill.bad{color:var(--bad);border-color:var(--bad)}
 .level{height:8px;border-radius:4px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
 .level div{height:100%;width:0;background:var(--good);transition:width .05s}
@@ -63,3 +212,1266 @@ details p{margin-top:8px}
         <span id="pvPos" class="mono muted small"></span>
       </div>
       <p class="muted small">Turn on the metronome and listen. If it sits on the drums, the grid is right. If it doesn't, fix it below.</p>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Tempo and grid</div>
+      <div class="grid2">
+        <div class="field">
+          <label for="bpm">Tempo (BPM)</label>
+          <div class="stepper"><button data-bpm="-0.5" aria-label="Slower">−</button><input id="bpm" type="number" step="0.1" min="30" max="260" inputmode="decimal"><button data-bpm="0.5" aria-label="Faster">+</button></div>
+          <div class="row gap wrap"><button class="chip" data-bpmx="0.5">Half</button><button class="chip" data-bpmx="2">Double</button><button class="chip" id="redetect">Detect again</button></div>
+        </div>
+        <div class="field">
+          <label>Line up bar 1</label>
+          <div class="row gap wrap"><button class="chip" data-nudge="-0.01">◂ 10 ms</button><button class="chip" data-nudge="0.01">10 ms ▸</button><button class="chip" data-shift="-1">◂ 1 beat</button><button class="chip" data-shift="1">1 beat ▸</button><button class="chip" id="halfShift">½ beat</button></div>
+          <div class="muted small mono" id="offsetOut"></div>
+        </div>
+      </div>
+      <label class="check"><input id="follow" type="checkbox"> Follow the band's tempo changes</label>
+      <div class="small muted" id="tempoInfo"></div>
+      <div class="tapbox">
+        <button id="tapTempo" class="btn big">Tap along</button>
+        <div class="small muted" id="tapOut">Play the song and tap this on every beat, starting on a "1". After 8 taps Pocket sets the tempo and bar 1 from your taps.</div>
+      </div>
+    </div>
+    <button class="btn primary wide big" data-go="part">Next: your part</button>
+  </section>
+
+  <!-- STEP 2: PART -->
+  <section id="step-part" class="step" style="display:none;flex-direction:column;gap:14px">
+    <div class="panel">
+      <div class="grid2">
+        <div class="field">
+          <label for="entryBar">I come in at bar</label>
+          <div class="stepper"><button data-entry="-1" aria-label="Earlier bar">−</button><input id="entryBar" type="number" min="1" inputmode="numeric"><button data-entry="1" aria-label="Later bar">+</button></div>
+          <div class="small muted" id="entryOut"></div>
+        </div>
+        <div class="field">
+          <label for="bars">Play for (bars)</label>
+          <div class="stepper"><button data-bars="-1" aria-label="Fewer bars">−</button><input id="bars" type="number" min="0" inputmode="numeric"><button data-bars="1" aria-label="More bars">+</button></div>
+          <div class="small muted">0 means until the song ends</div>
+        </div>
+        <div class="field">
+          <label for="bpb">Beats per bar</label>
+          <select id="bpb"><option value="4">4 (most songs)</option><option value="3">3 (waltz)</option><option value="2">2</option><option value="6">6</option></select>
+        </div>
+        <div class="field">
+          <label for="subdiv">Strum grid</label>
+          <select id="subdiv"><option value="2">Eighths: 1 &amp; 2 &amp;</option><option value="4">Sixteenths: 1 e &amp; a</option><option value="3">Triplets: 1 trip let</option></select>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Strumming pattern</div>
+      <input id="pattern" type="text" class="patin" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Strumming pattern">
+      <p class="small muted">D = down, U = up, X = muted chuck, - = skip. One letter per slot of the grid. The pattern repeats.</p>
+      <div id="presets" class="row wrap gap"></div>
+      <div id="patPreview" class="patgrid"></div>
+      <div id="patWarn" class="warnline" hidden></div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Chords</div>
+      <input id="chords" type="text" autocomplete="off" spellcheck="false" aria-label="Chords by bar">
+      <p class="small muted">One chord per bar, split with |. Two chords in one bar share it: G | C D | Em. The list repeats.</p>
+      <div id="chordPreview" class="chordrow"></div>
+    </div>
+    <button class="btn primary wide big" data-go="play">Next: play</button>
+  </section>
+
+  <!-- STEP 3: PLAY -->
+  <section id="step-play" class="step" style="display:none;flex-direction:column;gap:14px">
+    <div class="note" id="hpNote"></div>
+
+    <div class="stage" id="stage">
+      <div class="status">
+        <div id="stEyebrow" class="eyebrow">Ready</div>
+        <div id="stBig" class="stbig">Press start</div>
+        <div id="stSub" class="stsub"></div>
+        <div class="beatlights" id="beatLights" aria-hidden="true"></div>
+      </div>
+      <button type="button" class="orb" id="orb" data-state="idle" aria-label="Timing light">
+        <span class="orb-word" id="orbWord">Ready</span>
+        <span class="orb-chord" id="chordNow">–</span>
+        <span class="orb-next">next <b id="chordNext">–</b></span>
+      </button>
+      <canvas id="lane" aria-label="Strum lane"></canvas>
+      <div class="meter">
+        <div class="mlabels"><span>◂ early</span><span>on the beat</span><span>late ▸</span></div>
+        <div class="mtrack"><div class="zone ok" id="zoneOk"></div><div class="zone tight" id="zoneTight"></div><div class="needle" id="needle"></div></div>
+        <div class="mread"><span id="mReading" class="mono">–</span><span id="trend" class="pill">Waiting</span></div>
+      </div>
+    </div>
+    <button id="goBtn" class="btn primary big wide">Start</button>
+
+    <div id="summary" class="panel" hidden>
+      <div class="eyebrow">How that went</div>
+      <div id="sumHead" class="songname"></div>
+      <div class="stats" id="sumStats"></div>
+      <canvas id="sumChart" aria-label="Timing of every strum"></canvas>
+      <p class="small muted">Each dot is one strum. Above the line is late, below is early. The green band is "on time". Red ticks at the bottom are strums Pocket didn't hear.</p>
+      <div id="sumTips" class="small"></div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Practice settings</div>
+      <div class="grid2">
+        <div class="field">
+          <label for="startFrom">Start from</label>
+          <select id="startFrom"><option value="start">The beginning of the song</option><option value="pre">2 bars before I come in</option></select>
+        </div>
+        <div class="field">
+          <label for="strict">How strict</label>
+          <select id="strict"><option value="relaxed">Relaxed (±50 ms is on time)</option><option value="normal">Normal (±35 ms)</option><option value="strict">Strict (±20 ms)</option></select>
+        </div>
+        <div class="field">
+          <label for="songVol">Song volume</label>
+          <input id="songVol" type="range" min="0" max="1" step="0.05">
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Metronome</div>
+      <div class="seg" role="group" aria-label="Metronome"><button data-metro="off">Off</button><button data-metro="countin">Count-in only</button><button data-metro="all">Whole song</button></div>
+      <div class="grid2">
+        <div class="field">
+          <label for="metSound">Sound</label>
+          <select id="metSound"><option value="click">Click</option><option value="wood">Woodblock</option><option value="hat">Hi-hat</option><option value="beep">Beep</option></select>
+        </div>
+        <div class="field">
+          <label for="metVol">Metronome volume</label>
+          <input id="metVol" type="range" min="0.05" max="1" step="0.05">
+        </div>
+      </div>
+      <div class="row between wrap gap"><p class="small muted" id="metroInfo" style="flex:1;min-width:200px"></p><button class="chip" id="metroTry">Hear it</button></div>
+    </div>
+
+    <div class="panel">
+      <div class="eyebrow">Listening</div>
+      <div class="grid2">
+        <div class="field"><label>Song plays through</label>
+          <div class="seg" role="group" aria-label="Song plays through"><button id="outSpk" aria-pressed="true">Phone speaker</button><button id="outHp" aria-pressed="false">Headphones</button></div></div>
+        <div class="field"><label>Pocket hears you by</label>
+          <div class="seg" role="group" aria-label="Input"><button id="inMic" aria-pressed="true">Microphone</button><button id="inTap" aria-pressed="false">Tapping</button></div></div>
+      </div>
+      <p class="small muted" id="inputHelp"></p>
+      <div class="field" id="micBox">
+        <label for="sens">Mic sensitivity</label>
+        <input id="sens" type="range" min="1" max="10" step="1">
+        <div class="level" aria-hidden="true"><div id="lvl"></div></div>
+        <div class="row between"><span class="small muted" id="heard">Strum once to test. Each strum Pocket hears flashes here.</span><button id="micTest" class="chip">Test mic</button></div>
+      </div>
+      <div class="row between wrap gap">
+        <div><div style="font-weight:600">Phone delay</div><div class="small muted" id="latOut"></div></div>
+        <button id="calBtn" class="btn">Calibrate</button>
+      </div>
+      <p class="small muted" id="calHelp"></p>
+    </div>
+
+    <details class="panel">
+      <summary>Why can't it play whole songs from search?</summary>
+      <p class="small muted">Streaming services only let web pages play 30-second previews. For a full song, use an audio file you own. Pocket has to play the song itself (rather than listen to Spotify) because that's how it knows the song position to the millisecond. Pocket can't tell a down strum from an up strum by sound, so it only checks when you strum.</p>
+    </details>
+  </section>
+</div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+/* ---------- storage (per-viewer convenience only) ---------- */
+const LS = {
+  get(k, d){ try{ const v = localStorage.getItem('pocket.'+k); return v == null ? d : JSON.parse(v); }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem('pocket.'+k, JSON.stringify(v)); }catch(e){} }
+};
+const SONG_KEYS = ['bpm','offset','beatsPerBar','subdiv','entryBar','bars','pattern','chords','musicStart','beats','b0','follow'];
+const S = Object.assign({
+  bpm:92, offset:0.5, musicStart:0.5, beatsPerBar:4, subdiv:2, entryBar:5, bars:16,
+  pattern:'D-DU-UDU', chords:'G | Em | C | D',
+  beats:null, b0:0, follow:true,
+  startFrom:'start', metro:'countin', metSound:'click', metVol:0.6, songVol:0.9, input:'mic', output:'speaker', strict:'normal', sens:5
+}, LS.get('prefs', {}));
+// older saves had two checkboxes instead of the metronome mode
+{ const old=LS.get('prefs', {}); if(old.metro==null && (old.clickAll!=null || old.countIn!=null)) S.metro = old.clickAll ? 'all' : old.countIn===false ? 'off' : 'countin'; }
+let latency = LS.get('latency', {});
+let coupling = LS.get('coupling', 0); // how loud the speaker's sound is in the mic, learned while you aren't playing
+let song = {name:'Demo track', buffer:null, peaks:null, demo:true};
+
+function savePrefs(){
+  LS.set('prefs', {startFrom:S.startFrom, metro:S.metro, metSound:S.metSound, metVol:S.metVol, songVol:S.songVol, input:S.input, output:S.output, strict:S.strict, sens:S.sens});
+  if(!song.demo){ const all = LS.get('songs', {}); const o = {}; SONG_KEYS.forEach(k => o[k] = S[k]); all[song.name] = o; LS.set('songs', all); }
+}
+
+let toastT;
+function toast(msg, ms=4200){ const t=$('#toast'); t.textContent=msg; t.hidden=false; clearTimeout(toastT); toastT=setTimeout(()=>t.hidden=true, ms); }
+
+/* ---------- theme tokens for canvas ---------- */
+const T = {};
+function readTokens(){ const cs=getComputedStyle(document.documentElement); ['bg','panel','ink','muted','line','amber','amber-soft','blue','good','warn','bad','lane'].forEach(k=>T[k]=cs.getPropertyValue('--'+k).trim()); T.perfect=T.blue; }
+readTokens();
+try{ matchMedia('(prefers-color-scheme: dark)').addEventListener('change', ()=>{ readTokens(); drawWave(); drawLaneIdle(); }); }catch(e){}
+new MutationObserver(()=>{ readTokens(); drawWave(); drawLaneIdle(); }).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+
+function fit(cv){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(2, window.devicePixelRatio||1);
+  const w=Math.max(1,Math.round(r.width*dpr)), h=Math.max(1,Math.round(r.height*dpr));
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
+  const c=cv.getContext('2d'); c.setTransform(dpr,0,0,dpr,0,0); return {c, w:r.width, h:r.height};
+}
+
+/* ---------- audio context ---------- */
+let ctx=null;
+// Everything Pocket plays goes through busNode. In speaker mode a delayed copy also goes to the
+// strum detector, so it knows which sounds in the mic are the song and not your guitar.
+let busNode=null, refDelay=null;
+function ac(){
+  if(!ctx){ const AC = window.AudioContext||window.webkitAudioContext; ctx = new AC({latencyHint:'interactive'});
+    busNode=ctx.createGain(); busNode.connect(ctx.destination); refDelay=ctx.createDelay(1.5); busNode.connect(refDelay); }
+  if(ctx.state==='suspended') ctx.resume();
+  return ctx;
+}
+const outLat = () => ctx ? (ctx.outputLatency||0) + (ctx.baseLatency||0) : 0;
+const latKey = () => S.input==='tap' ? 'tap' : S.output==='speaker' ? 'mic-spk' : 'mic';
+function curLatency(){ const v = latency[latKey()]; return v != null ? v : outLat() + (S.input==='mic' ? 0.012 : 0); }
+
+// Metronome sounds. Everything goes through busNode, so the metronome reaches your ears with exactly
+// the same delay as the song, and in speaker mode the strum detector knows to ignore it.
+let noiseBuf=null;
+function tick(at, accent, kind=S.metSound, vol=S.metVol){
+  const c=ctx, g=c.createGain(), peak=Math.max(0.0002, vol*(accent?1:0.62)*(kind==='hat'?0.72:1)); // noise reads louder, so the hi-hat is trimmed to match
+  g.connect(busNode);
+  const env=(len)=>{ g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at+0.0015); g.gain.exponentialRampToValueAtTime(0.0001, at+len); };
+  if(kind==='hat'){
+    if(!noiseBuf){ noiseBuf=c.createBuffer(1, c.sampleRate*0.2, c.sampleRate); const d=noiseBuf.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; }
+    const n=c.createBufferSource(), f=c.createBiquadFilter(); n.buffer=noiseBuf; f.type='highpass'; f.frequency.value=accent?6000:8000;
+    env(accent?0.09:0.05); n.connect(f).connect(g); n.start(at); n.stop(at+0.12);
+    return;
+  }
+  const o=c.createOscillator();
+  if(kind==='wood'){ o.type='sine'; o.frequency.setValueAtTime(accent?1250:900, at); o.frequency.exponentialRampToValueAtTime(accent?1000:720, at+0.04); env(0.06); }
+  else if(kind==='beep'){ o.type='sine'; o.frequency.value=accent?1320:880; g.gain.setValueAtTime(0.0001, at); g.gain.exponentialRampToValueAtTime(peak, at+0.004); g.gain.setValueAtTime(peak, at+0.05); g.gain.exponentialRampToValueAtTime(0.0001, at+0.08); }
+  else { o.type='square'; o.frequency.value=accent?1760:1175; env(0.045); }
+  o.connect(g); o.start(at); o.stop(at+0.1);
+}
+// calibration always uses the sharp click: it is the easiest sound to time
+const click=(at, accent, vol=0.5)=>tick(at, accent, 'click', vol);
+
+/* ---------- geometry ---------- */
+const G = () => { const beat=60/S.bpm; return {beat, bar:beat*S.beatsPerBar, slot:beat/S.subdiv}; };
+/* Beat k = k beats after bar 1's downbeat (fractions and negatives allowed). With "follow" on, beats come
+   from the beat tracker (S.beats, times in the song) and bend with the band's tempo; otherwise they are a
+   fixed grid of S.bpm starting at S.offset. Everything that needs a beat or bar time goes through here. */
+const tracked = () => !!(S.follow && S.beats && S.beats.length > 8);
+function edgePeriod(B, end){ const n=B.length, m=Math.min(8, n-1); return end ? (B[n-1]-B[n-1-m])/m : (B[m]-B[0])/m; }
+function beatTime(k){
+  if(!tracked()) return S.offset + k*60/S.bpm;
+  const B=S.beats, n=B.length, j=S.b0+k;
+  if(j<=0) return B[0] + j*edgePeriod(B,false);
+  if(j>=n-1) return B[n-1] + (j-n+1)*edgePeriod(B,true);
+  const i=Math.floor(j); return B[i] + (B[i+1]-B[i])*(j-i);
+}
+function beatIdx(t){
+  if(!tracked()) return (t-S.offset)*S.bpm/60;
+  const B=S.beats, n=B.length;
+  if(t<=B[0]) return (t-B[0])/edgePeriod(B,false) - S.b0;
+  if(t>=B[n-1]) return n-1 + (t-B[n-1])/edgePeriod(B,true) - S.b0;
+  let lo=0, hi=n-1; while(hi-lo>1){ const m=(lo+hi)>>1; if(B[m]<=t) lo=m; else hi=m; }
+  return lo + (t-B[lo])/(B[lo+1]-B[lo]) - S.b0;
+}
+const mod = (a, n) => ((a % n) + n) % n;
+const barStart = n => beatTime((n-1)*S.beatsPerBar);
+const barAt = t => Math.floor(beatIdx(t)/S.beatsPerBar + 1e-6) + 1;
+const beatInBar = t => Math.floor(mod(beatIdx(t)+1e-6, S.beatsPerBar)) + 1;
+// whole bars from bar `from` that fit before time t
+const barsBefore = (from, t) => Math.floor(beatIdx(t)/S.beatsPerBar + 1e-6) - (from-1);
+// switch a tracked grid to a fixed one without moving bar 1
+function toFixedGrid(){ if(tracked()){ S.offset=beatTime(0); S.follow=false; } }
+// keep bar 1 on the first downbeat at or after the music starts
+function normalizeBar1(){
+  const bpb=S.beatsPerBar, half=30/S.bpm;
+  for(let i=0;i<64 && beatTime(-bpb) >= S.musicStart-half; i++) shiftBeats(-bpb);
+  for(let i=0;i<64 && beatTime(0) < S.musicStart-half-1e-6; i++) shiftBeats(bpb);
+}
+function shiftBeats(k){ if(tracked()) S.b0+=k; else S.offset+=k*60/S.bpm; }
+
+function parsePattern(p){ return [...String(p).replace(/[\s|]/g,'')].map(ch => { const u=ch.toUpperCase(); return 'DUX'.includes(u) ? u : '-'; }); }
+function parseChords(s){
+  const t=String(s).trim(); if(!t) return [];
+  const bars = t.includes('|') ? t.split('|') : t.split(/\s+/);
+  return bars.map(b => b.trim().split(/\s+/).filter(Boolean)).filter(b => b.length);
+}
+function chordAt(t){
+  const cb=parseChords(S.chords); if(!cb.length) return null;
+  const rel=beatIdx(t)/S.beatsPerBar - (S.entryBar-1); if(rel < -1e-6) return null;
+  const r=Math.max(0, rel), bi=Math.floor(r), frac=r-bi, bar=cb[bi % cb.length];
+  return bar[Math.min(bar.length-1, Math.floor(frac*bar.length))];
+}
+function buildPart(){
+  const pat=parsePattern(S.pattern), dur=song.buffer.duration, start=barStart(S.entryBar);
+  const nBars = S.bars > 0 ? S.bars : Math.max(1, barsBefore(S.entryBar, dur));
+  const per = S.beatsPerBar*S.subdiv, total = nBars*per, ev=[];
+  if(pat.length) for(let k=0;k<total;k++){
+    const c=pat[k % pat.length]; if(c==='-') continue;
+    const t=beatTime((S.entryBar-1)*S.beatsPerBar + k/S.subdiv); if(t > dur) break;
+    ev.push({t, c, bar:S.entryBar + Math.floor(k/per), hit:false, miss:false, d:0});
+  }
+  for(let i=0;i<ev.length;i++){
+    const gp=Math.min(i ? ev[i].t-ev[i-1].t : 1, i<ev.length-1 ? ev[i+1].t-ev[i].t : 1);
+    ev[i].win=Math.min(0.18, gp*0.5);
+  }
+  return {ev, start, end:Math.min(dur, barStart(S.entryBar+nBars)), nBars};
+}
+const GRADES = {relaxed:[0.05,0.10], normal:[0.035,0.07], strict:[0.02,0.045]};
+// "perfect" is the inner half of the on-time window
+function grade(d){ const [a,b]=GRADES[S.strict]; const x=Math.abs(d); return x<=a*0.5 ? 'perfect' : x<=a ? 'good' : x<=b ? 'warn' : 'bad'; }
+const onTime = g => g==='perfect' || g==='good';
+
+/* ---------- demo track ---------- */
+async function makeDemo(){
+  const sr=44100, bpm=92, beat=60/bpm, bars=22, off=0.5, dur=off+bars*4*beat+1.5;
+  const OAC = window.OfflineAudioContext||window.webkitOfflineAudioContext;
+  const oc=new OAC(2, Math.ceil(sr*dur), sr);
+  const master=oc.createGain(); master.gain.value=0.55; master.connect(oc.destination);
+  const noise=oc.createBuffer(1, sr, sr), nd=noise.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+  const kick=t=>{ const o=oc.createOscillator(), g=oc.createGain(); o.frequency.setValueAtTime(140,t); o.frequency.exponentialRampToValueAtTime(45,t+0.12); g.gain.setValueAtTime(1,t); g.gain.exponentialRampToValueAtTime(0.001,t+0.35); o.connect(g).connect(master); o.start(t); o.stop(t+0.4); };
+  const nz=(t,type,f,len,v)=>{ const s=oc.createBufferSource(); s.buffer=noise; const fl=oc.createBiquadFilter(); fl.type=type; fl.frequency.value=f; const g=oc.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(0.001,t+len); s.connect(fl).connect(g).connect(master); s.start(t, Math.random()*0.5); s.stop(t+len+0.02); };
+  const CH={G:[98,196,247,294,392], Em:[82.4,164.8,196,247,329.6], C:[130.8,196,261.6,329.6,392], D:[146.8,220,293.7,370,440]};
+  const prog=['G','Em','C','D'];
+  for(let b=0;b<bars;b++){
+    const bt=off+b*4*beat;
+    for(let k=0;k<4;k++){ const t=bt+k*beat; if(k%2===0) kick(t); else nz(t,'bandpass',1800,0.18,0.8); }
+    for(let k=0;k<8;k++) nz(bt+k*beat/2,'highpass',7000,0.05,k%2?0.12:0.22);
+    if(b>=4 && b<bars-2){
+      CH[prog[(b-4)%4]].forEach(fr=>{
+        const o=oc.createOscillator(); o.type='sawtooth'; o.frequency.value=fr;
+        const lp=oc.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1100;
+        const g=oc.createGain(); g.gain.setValueAtTime(0.0001,bt); g.gain.linearRampToValueAtTime(0.045,bt+0.03); g.gain.setValueAtTime(0.045,bt+4*beat-0.08); g.gain.linearRampToValueAtTime(0.0001,bt+4*beat);
+        o.connect(lp).connect(g).connect(master); o.start(bt); o.stop(bt+4*beat+0.05);
+      });
+    }
+  }
+  return oc.startRendering();
+}
+
+/* ---------- analysis: tempo + bar 1 ---------- */
+function computePeaks(buf){
+  const sr=buf.sampleRate, step=Math.round(sr/100), n=Math.floor(buf.length/step);
+  const a=buf.getChannelData(0), b=buf.numberOfChannels>1 ? buf.getChannelData(1) : a, p=new Float32Array(n);
+  for(let f=0;f<n;f++){ let m=0; for(let i=f*step, e=i+step; i<e; i+=2){ const x=Math.abs(a[i]+b[i]); if(x>m) m=x; } p[f]=m*0.5; }
+  let mx=0; for(const v of p) if(v>mx) mx=v; if(mx>0) for(let i=0;i<n;i++) p[i]/=mx;
+  return p;
+}
+function analyze(buf){
+  const sr=buf.sampleRate, n=buf.length;
+  const a=buf.getChannelData(0), b=buf.numberOfChannels>1 ? buf.getChannelData(1) : a;
+  const hop=Math.round(sr*0.01), hopT=hop/sr, nF=Math.floor(n/hop);
+  const en=new Float32Array(nF); let prev=0, maxE=0;
+  for(let f=0;f<nF;f++){ let e=0; for(let i=f*hop, end=i+hop; i<end; i++){ const x=(a[i]+b[i])*0.5, d=x-prev; prev=x; e+=d*d; } en[f]=e; if(e>maxE) maxE=e; }
+  if(maxE<=0) return null;
+  let musicStart=0; for(let f=0;f<nF;f++){ if(en[f]>maxE*0.02){ musicStart=f*hopT; break; } }
+  const comp=new Float32Array(nF); for(let f=0;f<nF;f++) comp[f]=Math.log1p(1000*en[f]/maxE);
+  let env=new Float32Array(nF); for(let f=1;f<nF;f++) env[f]=Math.max(0, comp[f]-comp[f-1]);
+  const W=25, out=new Float32Array(nF); let sum=0;
+  for(let f=0;f<nF;f++){ sum+=env[f]; if(f>=2*W) sum-=env[f-2*W]; const c=f-W; if(c>=0) out[c]=Math.max(0, env[c]-sum/(2*W)); }
+  env=out;
+  const maxLag=460, acf=new Float32Array(maxLag+2), nA=Math.min(nF, 15000); // tempo from the first 150 s is plenty
+  for(let L=10;L<=maxLag+1;L++){ let s=0; for(let i=0;i+L<nA;i++) s+=env[i]*env[i+L]; acf[L]=s; }
+  const acI=p=>{ if(p>maxLag) return 0; const i=Math.floor(p), fr=p-i; return acf[i]*(1-fr)+acf[i+1]*fr; };
+  let best=100, bs=-1;
+  // 60-170: faster songs are counted in half time, which is how you'd strum them anyway (Double fixes it)
+  for(let bpm=60; bpm<=170; bpm+=0.25){
+    const p=60/bpm/hopT;
+    const s=(acI(p)+0.5*acI(2*p)+0.25*acI(4*p))*Math.exp(-0.5*Math.pow(Math.log2(bpm/110)/0.9,2));
+    if(s>bs){ bs=s; best=bpm; }
+  }
+  let fb=best, fph=0, fs=-1;
+  for(let bpm=best*0.985; bpm<=best*1.015; bpm+=0.01){
+    const per=60/bpm/hopT;
+    for(let ph=0; ph<per; ph+=1){
+      let s=0; for(let x=ph; x<nA; x+=per) s+=env[Math.round(x)]||0;
+      if(s>fs){ fs=s; fb=bpm; fph=ph; }
+    }
+  }
+  // Most songs start on a "1": take the grid beat closest to where the music starts as bar 1.
+  const beatT=60/fb, phT=fph*hopT;
+  const offset=phT + Math.round((musicStart-phT)/beatT)*beatT;
+  // Then follow the actual beats through the whole song, so the grid bends when the band speeds up or slows down.
+  let beats=trackBeats(env, hopT, fb, a, b, sr, musicStart);
+  // The beat should sit on the kick drum. When the tracker counts a fast song in half time it can land on the
+  // snare (2 and 4) instead: if the low end hits harder halfway between beats, move every beat by half.
+  const low=lowOnsets(a, b, sr, hop, nF), lowAt=t=>{ const f=Math.round(t/hopT); let m=0; for(let k=f-1;k<=f+3;k++) m=Math.max(m, low[k]||0); return m; };
+  let onB=0, onM=0; for(let i=0;i+1<beats.length;i++){ onB+=lowAt(beats[i]); onM+=lowAt((beats[i]+beats[i+1])/2); }
+  if(fb<=90 && beats.length>8 && onM>onB*1.5){ // only slow readings can be a fast song counted in half time
+    const mids=beats.slice(0,-1).map((t,i)=>(t+beats[i+1])/2), first=beats[0]-(beats[1]-beats[0])/2;
+    if(first>=musicStart-0.06) mids.unshift(first); // the kick before the first snare
+    beats=smoothBeats(refineBeats(mids, a, b, sr));
+  }
+  let b0=0, bd=1e9; beats.forEach((t,i)=>{ const d=Math.abs(t-musicStart); if(d<bd){ bd=d; b0=i; } });
+  const ivs=beats.slice(1).map((t,i)=>t-beats[i]).sort((x,y)=>x-y);
+  const med=ivs.length ? ivs[ivs.length>>1] : 60/fb;
+  return {bpm:Math.round(6000/med)/100, offset, musicStart, beats:beats.map(t=>Math.round(t*10000)/10000), b0};
+}
+// Dynamic-programming beat tracker (after Ellis 2007): find the chain of beats that lands on the most onsets,
+// paying a penalty whenever the gap between beats strays from the song's tempo. Then smooth each beat
+// with a straight line through its neighbours, which keeps real tempo changes and removes the 10 ms jitter.
+function trackBeats(env, hopT, bpm, a, b, sr, musicStart=0){
+  const N=env.length, p=60/bpm/hopT;
+  let ss=0; for(let i=0;i<N;i++) ss+=env[i]*env[i]; const sd=Math.sqrt(ss/N)||1;
+  const lo=Math.max(1, Math.round(p*0.5)), hi=Math.round(p*2), tight=400;
+  const pen=new Float32Array(hi+1); for(let d=lo; d<=hi; d++) pen[d]=-tight*Math.pow(Math.log(d/p),2);
+  const sc=new Float32Array(N), bk=new Int32Array(N).fill(-1);
+  for(let t=0;t<N;t++){
+    let best=-1e30, bi=-1;
+    for(let d=lo; d<=hi && t-d>=0; d++){ const v=sc[t-d]+pen[d]; if(v>best){ best=v; bi=t-d; } }
+    // a chain may also start here, so the first beat is the first real hit rather than a guess in the silence
+    if(bi>=0 && best>0){ sc[t]=env[t]/sd+best; bk[t]=bi; } else { sc[t]=env[t]/sd; bk[t]=-1; }
+  }
+  let end=N-1, bs=-1e30; for(let t=Math.max(0, N-hi); t<N; t++) if(sc[t]>bs){ bs=sc[t]; end=t; }
+  const fr=[]; for(let t=end; t>=0; t=bk[t]) fr.push(t);
+  fr.reverse();
+  // beats 'found' in the silence before the music are guesses; drop them (beatTime extends the grid back instead)
+  return smoothBeats(refineBeats(fr.map(f=>f*hopT).filter(t=>t>=musicStart-0.06), a, b, sr));
+}
+function smoothBeats(raw){
+  const out=new Array(raw.length), W=4;
+  for(let i=0;i<raw.length;i++){
+    const a=Math.max(0,i-W), b=Math.min(raw.length-1,i+W); let n=0, sx=0, sy=0, sxx=0, sxy=0;
+    for(let j=a;j<=b;j++){ n++; sx+=j; sy+=raw[j]; sxx+=j*j; sxy+=j*raw[j]; }
+    const slope=(n*sxy-sx*sy)/(n*sxx-sx*sx||1), icpt=(sy-slope*sx)/n;
+    out[i]=icpt+slope*i;
+  }
+  return out;
+}
+// onsets of the low end only (a one-pole low-pass around 150 Hz): where the bass drum hits
+function lowOnsets(a, b, sr, hop, nF){
+  const k=1-Math.exp(-2*Math.PI*150/sr), en=new Float32Array(nF); let y=0, mx=0;
+  for(let f=0;f<nF;f++){ let e=0; for(let i=f*hop, end=i+hop; i<end; i++){ y+=((a[i]+b[i])*0.5-y)*k; e+=y*y; } en[f]=e; if(e>mx) mx=e; }
+  const out=new Float32Array(nF); let prev=0;
+  for(let f=0;f<nF;f++){ const c=Math.log1p(1000*en[f]/(mx||1)); out[f]=Math.max(0, c-prev); prev=c; }
+  return out;
+}
+// The tracker works in 10 ms steps. Look again at 1 ms resolution around each beat and move it onto the
+// exact attack when there is a clear one (a 2.7x jump in energy within 1 ms); otherwise use the step's middle.
+function refineBeats(raw, a, b, sr){
+  const fh=Math.max(1, Math.round(sr*0.001));
+  return raw.map(t=>{
+    const s0=Math.max(1, Math.floor((t-0.012)*sr)), s1=Math.min(a.length-1, Math.floor((t+0.022)*sr));
+    let prev=(a[s0-1]+b[s0-1])*0.5, prevC=null, best=0, bt=t+0.005;
+    for(let s=s0; s+fh<=s1; s+=fh){
+      let e=0; for(let i=s;i<s+fh;i++){ const x=(a[i]+b[i])*0.5, d=x-prev; prev=x; e+=d*d; }
+      const c=Math.log(1e-12+e); if(prevC!=null && c-prevC>best){ best=c-prevC; bt=s/sr; } prevC=c;
+    }
+    return best>1 ? bt : t+0.005;
+  });
+}
+// tempo range of the tracked beats, measured over 8-beat stretches
+function tempoRange(){
+  if(!tracked()) return null;
+  const B=S.beats; let mn=1e9, mx=0;
+  for(let i=0;i+8<B.length;i+=4){ const t=480/(B[i+8]-B[i]); if(t<mn) mn=t; if(t>mx) mx=t; }
+  return mx ? [mn, mx] : null;
+}
+
+/* ---------- loading songs ---------- */
+async function loadDemo(){
+  song={name:'Demo track', buffer:await makeDemo(), peaks:null, demo:true, art:''};
+  song.peaks=computePeaks(song.buffer);
+  Object.assign(S, {bpm:92, offset:0.5, musicStart:0.5, beats:null, b0:0, follow:true, beatsPerBar:4, subdiv:2, entryBar:5, bars:16, pattern:'D-DU-UDU', chords:'G | Em | C | D'});
+  refreshAll();
+}
+async function useAudio(data, name, extra={}){
+  const buf=await new Promise((res,rej)=>{ const p=ac().decodeAudioData(data, res, rej); if(p && p.then) p.then(res, rej); });
+  song=Object.assign({name, buffer:buf, peaks:computePeaks(buf), demo:false}, extra);
+  const saved=LS.get('songs',{})[song.name];
+  // setups saved before beat tracking have no beats: start from a clean fixed grid, never the last song's beats
+  if(saved){ Object.assign(S, {beats:null, b0:0, follow:true}, saved); toast('Loaded your saved setup for this song.'); }
+  else {
+    $('#songName').textContent='Finding the beat…';
+    await new Promise(r=>setTimeout(r,30));
+    const r=analyze(buf);
+    if(r){ S.bpm=r.bpm; S.offset=r.offset; S.musicStart=r.musicStart; S.beats=r.beats; S.b0=r.b0; S.follow=true; }
+    if(extra.preview){ S.entryBar=3; S.bars=0; } else S.entryBar=Math.max(1, S.entryBar|0);
+    toast('Tempo detected. Play it with the click on to check it lines up.');
+  }
+  wsc.scrollLeft=0; refreshAll(); savePrefs();
+}
+$('#file').addEventListener('change', async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  stopPreview(); stopRun(false);
+  $('#songName').textContent='Loading…'; $('#songMeta').textContent=f.name;
+  $$('#results .result').forEach(b=>b.classList.remove('on'));
+  try{ await useAudio(await f.arrayBuffer(), f.name.replace(/\.[^.]+$/,'')); }
+  catch(err){ toast("Couldn't read that file. Try an mp3, m4a or wav."); refreshAll(); }
+  e.target.value='';
+});
+
+/* search: Apple's public music search, which serves 30-second previews */
+let searchSeq=0;
+const fmtDur=ms=>{ if(!ms) return ''; const s=Math.round(ms/1000); return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); };
+$('#searchForm').addEventListener('submit', async e=>{
+  e.preventDefault(); const q=$('#q').value.trim(); if(!q) return;
+  $('#q').blur();
+  const seq=++searchSeq, box=$('#results'); box.innerHTML='<p class="small muted">Searching…</p>';
+  try{
+    const r=await fetch('https://itunes.apple.com/search?'+new URLSearchParams({term:q, media:'music', entity:'song', limit:'15'}));
+    if(!r.ok) throw new Error(r.status);
+    const items=(await r.json()).results.filter(x=>x.previewUrl);
+    if(seq!==searchSeq) return;
+    if(!items.length){ box.innerHTML='<p class="small muted">No songs found. Try the song and artist together.</p>'; return; }
+    box.innerHTML=items.map((x,i)=>`<button type="button" class="result" data-i="${i}"><img src="${esc(x.artworkUrl60||x.artworkUrl100||'')}" alt="" width="48" height="48" loading="lazy"><span class="rt"><b>${esc(x.trackName)}</b><span>${esc(x.artistName)}${x.collectionName?' · '+esc(x.collectionName):''}</span></span><span class="rd mono">${fmtDur(x.trackTimeMillis)}</span></button>`).join('');
+    $$('#results .result').forEach(b=>b.addEventListener('click', ()=>pickResult(items[+b.dataset.i], b)));
+  }catch(err){
+    if(seq===searchSeq) box.innerHTML='<p class="small muted">Search didn\'t work. Check you\'re online and try again.</p>';
+  }
+});
+async function pickResult(x, btn){
+  stopPreview(); stopRun(false);
+  $$('#results .result').forEach(b=>b.classList.remove('on')); btn.classList.add('on');
+  $('#songName').textContent='Loading…'; $('#songMeta').textContent=x.trackName+' · '+x.artistName;
+  try{
+    const r=await fetch(x.previewUrl); if(!r.ok) throw new Error(r.status);
+    await useAudio(await r.arrayBuffer(), x.trackName+' – '+x.artistName, {preview:true, art:(x.artworkUrl100||'')});
+  }catch(err){ toast("Couldn't load that preview. Try another result."); refreshAll(); }
+}
+$('#redetect').addEventListener('click', ()=>{
+  if(!song.buffer) return;
+  const r=analyze(song.buffer); if(r){ S.bpm=r.bpm; S.offset=r.offset; S.musicStart=r.musicStart; S.beats=r.beats; S.b0=r.b0; S.follow=true; refreshAll(); savePrefs(); toast('Detected '+r.bpm.toFixed(1)+' BPM.'); }
+});
+
+/* ---------- waveform ---------- */
+const PPS=28; // pixels per second
+const wsc=$('#waveScroll'), wcv=$('#wave');
+let pvHead=-1;
+function drawWave(){
+  if(!song.buffer){ return; }
+  $('#waveSpacer').style.width=Math.ceil(song.buffer.duration*PPS)+'px';
+  const {c,w,h}=fit(wcv), x0=wsc.scrollLeft, t0=x0/PPS, t1=(x0+w)/PPS, g=G();
+  c.clearRect(0,0,w,h);
+  const part=buildPartRange();
+  const px=t=>(t*PPS)-x0;
+  c.fillStyle=T['amber-soft']; c.fillRect(px(part.start), 0, (part.end-part.start)*PPS, h);
+  const p=song.peaks, mid=h/2+8;
+  c.fillStyle=T.muted;
+  for(let x=0;x<w;x++){
+    const fa=Math.floor((x0+x)/PPS*100), fb=Math.floor((x0+x+1)/PPS*100); let m=0;
+    for(let f=fa; f<=fb && f<p.length; f++) if(p[f]>m) m=p[f];
+    const hh=Math.max(1,m*(h-28)/2); c.fillRect(x, mid-hh, 1, hh*2);
+  }
+  c.font='500 11px '+getComputedStyle(document.body).getPropertyValue('--f-mono');
+  c.textBaseline='top';
+  let n=Math.max(1, barAt(t0)-1);
+  for(let bt=barStart(n); bt<t1+g.bar; n++, bt=barStart(n)){
+    const x=px(bt); if(x<-40) continue;
+    const isEntry=n===S.entryBar;
+    c.fillStyle=isEntry ? T.amber : T.line; c.fillRect(Math.round(x), 0, isEntry?3:1, h);
+    c.fillStyle=isEntry ? T.amber : T.ink;
+    if(isEntry){ c.font='600 11px '+getComputedStyle(document.body).getPropertyValue('--f-body'); c.fillText('IN · '+n, x+6, 4); c.font='500 11px '+getComputedStyle(document.body).getPropertyValue('--f-mono'); }
+    else if(g.bar*PPS>22 || n%4===1) c.fillText(String(n), x+4, 4);
+  }
+  if(pvHead>=0){ const x=px(pvHead); c.fillStyle=T.bad; c.fillRect(x-1,0,2,h); }
+}
+function buildPartRange(){
+  const start=barStart(S.entryBar), dur=song.buffer ? song.buffer.duration : 0;
+  const nBars = S.bars>0 ? S.bars : Math.max(1, barsBefore(S.entryBar, dur));
+  return {start, end:Math.min(dur, barStart(S.entryBar+nBars))};
+}
+wsc.addEventListener('scroll', ()=>requestAnimationFrame(drawWave), {passive:true});
+let wDown=null;
+wsc.addEventListener('pointerdown', e=>{ wDown={x:e.clientX, s:wsc.scrollLeft}; });
+wsc.addEventListener('pointerup', e=>{
+  if(!wDown || Math.abs(e.clientX-wDown.x)>6 || Math.abs(wsc.scrollLeft-wDown.s)>6){ wDown=null; return; }
+  wDown=null;
+  const r=wsc.getBoundingClientRect(), t=(e.clientX-r.left+wsc.scrollLeft)/PPS;
+  S.entryBar=Math.max(1, barAt(t)); refreshAll(); savePrefs();
+  toast('You come in at bar '+S.entryBar+'.', 1800);
+});
+window.addEventListener('resize', ()=>{ drawWave(); drawLaneIdle(); });
+
+/* ---------- preview transport ---------- */
+let pv=null;
+function startPreview(from){
+  stopPreview(); stopRun(false);
+  const c=ac(), src=c.createBufferSource(), g=c.createGain();
+  src.buffer=song.buffer; g.gain.value=S.songVol; src.connect(g).connect(busNode);
+  const T0=c.currentTime+0.08; from=Math.max(0, Math.min(from, song.buffer.duration-0.1));
+  src.start(T0, from);
+  pv={src, gain:g, T0, from, nextBeat:Math.ceil(beatIdx(from)-1e-6), timer:0, raf:0};
+  src.onended=()=>{ if(pv && pv.src===src) stopPreview(); };
+  pv.timer=setInterval(()=>{
+    if(!pv) return; const ahead=c.currentTime-pv.T0+pv.from+0.12;
+    for(let bt=beatTime(pv.nextBeat); bt<ahead; bt=beatTime(pv.nextBeat)){
+      const at=pv.T0+(bt-pv.from);
+      const inCount = bt>=barStart(S.entryBar-1)-1e-4 && bt<barStart(S.entryBar)-1e-4;
+      if(at>=c.currentTime && ($('#pvClick').checked || (pv.entryMode && inCount))) tick(at, mod(pv.nextBeat, S.beatsPerBar)===0);
+      pv.nextBeat++;
+    }
+  }, 25);
+  const loop=()=>{
+    if(!pv) return;
+    const t=c.currentTime-pv.T0+pv.from-outLat(); pvHead=t;
+    $('#pvPos').textContent = t<barStart(1)-0.02 ? 'before bar 1' : 'bar '+barAt(t)+' · beat '+beatInBar(t);
+    const x=t*PPS; if(x<wsc.scrollLeft+40 || x>wsc.scrollLeft+wsc.clientWidth*0.75) wsc.scrollLeft=x-wsc.clientWidth*0.25;
+    drawWave(); pv.raf=requestAnimationFrame(loop);
+  };
+  loop();
+  $('#pvPlay').textContent='Stop';
+  return pv;
+}
+function stopPreview(){
+  if(!pv) return; try{ pv.src.onended=null; pv.src.stop(); }catch(e){}
+  clearInterval(pv.timer); cancelAnimationFrame(pv.raf); pv=null; pvHead=-1;
+  $('#pvPlay').textContent='Play song'; $('#pvPos').textContent=''; drawWave();
+}
+$('#pvPlay').addEventListener('click', ()=>{ if(pv) stopPreview(); else startPreview(0); });
+$('#pvEntry').addEventListener('click', ()=>{ const p=startPreview(barStart(S.entryBar-2)); p.entryMode=true; });
+
+/* tap along to set tempo + bar 1 */
+let taps=[];
+$('#tapTempo').addEventListener('pointerdown', e=>{
+  e.preventDefault();
+  if(!pv){ $('#tapOut').textContent='Start the song first (Play song), then tap on every beat starting on a "1".'; return; }
+  const c=ctx, now=c.currentTime-(performance.now()-e.timeStamp)/1000;
+  const t=now-pv.T0+pv.from-outLat();
+  if(taps.length && t-taps[taps.length-1]>2) taps=[];
+  taps.push(t);
+  if(taps.length<8){ $('#tapOut').textContent='Keep tapping… '+taps.length+' of 8'; return; }
+  const n=taps.length, xs=taps.map((_,i)=>i), mx=(n-1)/2, my=taps.reduce((a,b)=>a+b,0)/n;
+  let sxy=0, sxx=0; for(let i=0;i<n;i++){ sxy+=(xs[i]-mx)*(taps[i]-my); sxx+=(xs[i]-mx)**2; }
+  const per=sxy/sxx, a=my-per*mx;
+  S.follow=false; S.bpm=Math.round(60/per*10)/10;
+  const bar=60/S.bpm*S.beatsPerBar;
+  S.offset=a - bar*Math.floor((a-(S.musicStart-60/S.bpm*0.5))/bar);
+  $('#tapOut').textContent=`Set from ${n} taps: ${S.bpm.toFixed(1)} BPM, your first tap is a bar line. Keep tapping to refine.`;
+  refreshAll(true); savePrefs();
+});
+
+/* ---------- step 1/2 controls ---------- */
+function bindNum(id, key, fn){ $(id).addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(!isNaN(v)){ S[key]=fn?fn(v):v; refreshAll(); savePrefs(); } }); }
+$('#bpm').addEventListener('change', e=>{ const v=parseFloat(e.target.value); if(!isNaN(v)){ toFixedGrid(); S.bpm=Math.min(260,Math.max(30,v)); refreshAll(); savePrefs(); } });
+bindNum('#entryBar','entryBar', v=>Math.max(1,Math.round(v)));
+bindNum('#bars','bars', v=>Math.max(0,Math.round(v)));
+$$('[data-bpm]').forEach(b=>b.addEventListener('click', ()=>{
+  const was=tracked(); toFixedGrid(); S.bpm=Math.round((S.bpm+parseFloat(b.dataset.bpm))*100)/100; refreshAll(); savePrefs();
+  if(was) toast('Switched to a fixed tempo. Tick "Follow the band\'s tempo changes" to go back.');
+}));
+$$('[data-bpmx]').forEach(b=>b.addEventListener('click', ()=>{
+  const x=parseFloat(b.dataset.bpmx);
+  if(tracked()){
+    const B=S.beats;
+    if(x===2){ const nb=[]; for(let i=0;i<B.length;i++){ nb.push(B[i]); if(i<B.length-1) nb.push((B[i]+B[i+1])/2); } S.beats=nb; S.b0*=2; }
+    else { const par=mod(S.b0,2); S.beats=B.filter((_,i)=>i%2===par); S.b0=Math.floor(S.b0/2); }
+  }
+  S.bpm=Math.round(S.bpm*x*100)/100; normalizeBar1(); refreshAll(); savePrefs();
+}));
+$$('[data-nudge]').forEach(b=>b.addEventListener('click', ()=>{ const d=parseFloat(b.dataset.nudge); if(tracked()) S.beats=S.beats.map(t=>t+d); S.offset+=d; refreshAll(); savePrefs(); }));
+$$('[data-shift]').forEach(b=>b.addEventListener('click', ()=>{ shiftBeats(parseInt(b.dataset.shift)); normalizeBar1(); refreshAll(); savePrefs(); }));
+// for when the grid sits on the off-beats ("and"s) instead of the beats
+$('#halfShift').addEventListener('click', ()=>{
+  if(tracked()){ const B=S.beats, mids=B.slice(0,-1).map((t,i)=>(t+B[i+1])/2); mids.unshift(B[0]-(B[1]-B[0])/2); S.beats=mids; }
+  else S.offset+=30/S.bpm;
+  normalizeBar1(); refreshAll(); savePrefs(); toast('Moved the beat by half. Turn on the metronome to check it sits on the drums.');
+});
+$('#follow').addEventListener('change', e=>{
+  if(e.target.checked && !(S.beats && S.beats.length>8)){ e.target.checked=false; toast('Press "Detect again" to track this song\'s beats first.'); return; }
+  if(!e.target.checked) toFixedGrid();
+  else { S.follow=true; const B=S.beats, iv=B.slice(1).map((t,i)=>t-B[i]).sort((x,y)=>x-y); S.bpm=Math.round(6000/iv[iv.length>>1])/100; normalizeBar1(); }
+  refreshAll(); savePrefs();
+});
+$$('[data-entry]').forEach(b=>b.addEventListener('click', ()=>{ S.entryBar=Math.max(1,S.entryBar+parseInt(b.dataset.entry)); refreshAll(); savePrefs(); }));
+$$('[data-bars]').forEach(b=>b.addEventListener('click', ()=>{ S.bars=Math.max(0,S.bars+parseInt(b.dataset.bars)); refreshAll(); savePrefs(); }));
+$('#bpb').addEventListener('change', e=>{ S.beatsPerBar=+e.target.value; normalizeBar1(); refreshAll(); renderBeatLights(); savePrefs(); });
+$('#subdiv').addEventListener('change', e=>{ S.subdiv=+e.target.value; refreshAll(); savePrefs(); });
+$('#pattern').addEventListener('input', e=>{ S.pattern=e.target.value; renderPattern(); drawLaneIdle(); savePrefs(); });
+$('#chords').addEventListener('input', e=>{ S.chords=e.target.value; renderChords(); drawLaneIdle(); savePrefs(); });
+
+const PRESETS=[
+  {name:'Old faithful', p:'D-DU-UDU', bpb:4, sub:2},
+  {name:'Downs on the beat', p:'D-D-D-D-', bpb:4, sub:2},
+  {name:'All eighths', p:'DUDUDUDU', bpb:4, sub:2},
+  {name:'Chuck on 2 and 4', p:'D-X-D-X-', bpb:4, sub:2},
+  {name:'Push', p:'D-D-DU-U', bpb:4, sub:2},
+  {name:'Waltz', p:'D-DUDU', bpb:3, sub:2},
+  {name:'Sixteenth groove', p:'D--UD-DU-UD-DUDU', bpb:4, sub:4},
+];
+$('#presets').innerHTML=PRESETS.map((p,i)=>`<button class="chip" data-preset="${i}">${p.name}</button>`).join('');
+$$('[data-preset]').forEach(b=>b.addEventListener('click', ()=>{ const p=PRESETS[+b.dataset.preset]; S.pattern=p.p; S.beatsPerBar=p.bpb; S.subdiv=p.sub; refreshAll(); savePrefs(); }));
+
+function countLabels(){
+  const sub={2:['&'],3:['trip','let'],4:['e','&','a']}[S.subdiv]||[];
+  const out=[]; for(let b=1;b<=S.beatsPerBar;b++){ out.push(String(b)); sub.forEach(s=>out.push(s)); } return out;
+}
+const GLYPH={D:'↓',U:'↑',X:'×','-':''};
+function renderPattern(){
+  const pat=parsePattern(S.pattern), per=S.beatsPerBar*S.subdiv, labels=countLabels();
+  const len=Math.max(per, pat.length ? Math.ceil(pat.length/per)*per : per);
+  const cols=Math.min(len, per);
+  $('#patPreview').style.gridTemplateColumns=`repeat(${cols}, minmax(28px,1fr))`;
+  let h=''; for(let i=0;i<len;i++){ const c=pat.length ? pat[i%pat.length] : '-'; h+=`<div class="cell${i%S.subdiv===0?' beat':''}"><span class="cnt">${labels[i%per]}</span><span class="gl">${GLYPH[c]}</span></div>`; }
+  $('#patPreview').innerHTML=h;
+  const w=$('#patWarn');
+  if(!pat.length){ w.hidden=false; w.textContent='Type a pattern, for example D-DU-UDU.'; }
+  else if(pat.length%per!==0 && per%pat.length!==0){ w.hidden=false; w.textContent=`This pattern has ${pat.length} slots but a bar has ${per}. It will drift across the bar lines.`; }
+  else w.hidden=true;
+}
+function renderChords(){
+  const cb=parseChords(S.chords);
+  $('#chordPreview').innerHTML = cb.length ? cb.map((b,i)=>`<span><small>${S.entryBar+i}</small>${b.map(esc).join(' ')}</span>`).join('') : '<span class="muted small">No chords. That\'s fine, Pocket still checks your timing.</span>';
+}
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function refreshAll(keepTapText){
+  $('#songName').textContent=song.name;
+  if(song.buffer){ const d=song.buffer.duration; $('#songMeta').textContent=`${song.preview?'30-sec preview':Math.floor(d/60)+':'+String(Math.floor(d%60)).padStart(2,'0')} · ${S.bpm.toFixed(1)} BPM · ${S.beatsPerBar}/4`; }
+  const art=$('#songArt'); if(song.art){ if(art.getAttribute('src')!==song.art) art.src=song.art; art.hidden=false; } else art.hidden=true;
+  const ae=document.activeElement;
+  if(ae!==$('#bpm')) $('#bpm').value=S.bpm;
+  if(ae!==$('#entryBar')) $('#entryBar').value=S.entryBar;
+  if(ae!==$('#bars')) $('#bars').value=S.bars;
+  if(ae!==$('#pattern')) $('#pattern').value=S.pattern;
+  if(ae!==$('#chords')) $('#chords').value=S.chords;
+  $('#bpb').value=S.beatsPerBar; $('#subdiv').value=S.subdiv;
+  $('#offsetOut').textContent=`Bar 1 starts at ${barStart(1).toFixed(3)} s`;
+  $('#follow').checked=tracked(); $('#follow').disabled=!(S.beats && S.beats.length>8);
+  const tr=tempoRange();
+  $('#tempoInfo').textContent = tr ? (tr[1]-tr[0] < 1 ? `Steady tempo. Pocket is following the song's own beats.` : `The band drifts between ${tr[0].toFixed(1)} and ${tr[1].toFixed(1)} BPM. Pocket's beats follow it.`)
+    : S.beats ? 'Fixed tempo. Bar lines are evenly spaced.' : song.demo ? 'The demo is played by a machine, so its tempo never changes.' : 'Fixed tempo. Press "Detect again" to follow the band instead.';
+  renderMetroInfo();
+  if(song.buffer){ const t=barStart(S.entryBar); $('#entryOut').textContent=`That's ${Math.floor(t/60)}:${(t%60).toFixed(1).padStart(4,'0')} into the song`; }
+  renderPattern(); renderChords(); drawWave(); drawLaneIdle(); renderSettings();
+}
+
+/* ---------- tabs ---------- */
+function goStep(s){
+  $$('.steps button').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.step===s)));
+  ['song','part','play'].forEach(k=>$('#step-'+k).style.display = k===s ? 'flex' : 'none');
+  if(s!=='song') stopPreview();
+  if(s==='song') drawWave();
+  if(s==='play'){ drawLaneIdle(); renderBeatLights(); }
+  window.scrollTo({top:0});
+}
+$$('.steps button').forEach(b=>b.addEventListener('click', ()=>goStep(b.dataset.step)));
+$$('[data-go]').forEach(b=>b.addEventListener('click', ()=>goStep(b.dataset.go)));
+
+/* ---------- settings ---------- */
+function renderSettings(){
+  $('#startFrom').value=S.startFrom; $('#strict').value=S.strict; $('#songVol').value=S.songVol;
+  $('#sens').value=S.sens; $('#metSound').value=S.metSound; $('#metVol').value=S.metVol;
+  $$('[data-metro]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.metro===S.metro)));
+  $('#inMic').setAttribute('aria-pressed', String(S.input==='mic')); $('#inTap').setAttribute('aria-pressed', String(S.input==='tap'));
+  $('#micBox').style.display = S.input==='mic' ? 'flex' : 'none';
+  $('#outSpk').setAttribute('aria-pressed', String(S.output==='speaker')); $('#outHp').setAttribute('aria-pressed', String(S.output==='headphones'));
+  $('#hpNote').innerHTML = S.output==='speaker'
+    ? '<b>Song plays through the phone speaker.</b> Pocket knows exactly what it is playing, so it filters the song out of what the mic hears and listens for your guitar. Calibrate once with the phone where it will sit while you play. Wired headphones are still the most accurate.'
+    : '<b>Wear wired headphones.</b> The song goes in your ears and the mic only hears your guitar. Bluetooth headphones work too, but only after you calibrate, because they add a long delay.';
+  $('#calHelp').textContent = S.input==='tap'
+    ? 'Pocket plays 16 clicks. Tap right on each one. This measures the delay between the phone playing a sound and your tap reaching it.'
+    : S.output==='speaker'
+      ? 'Put the phone where it will sit while you play and stay quiet for the first few clicks: Pocket times its own clicks through the speaker. If the phone cancels them out, it then asks you to strum along to 16 clicks instead.'
+      : 'Pocket plays 16 clicks in your headphones. Strum right on each one. Do it once per phone and pair of headphones.';
+  $('#inputHelp').textContent = S.input==='mic'
+    ? 'Pocket listens through the mic and marks every strum it hears.'
+    : 'Tap the strum lane (or press space) every time you strum. Useful for practising the rhythm without the guitar, or where the mic is blocked.';
+  const L=latency[latKey()], how={tap:'tapping', 'mic-spk':'mic, phone speaker', mic:'mic, headphones'}[latKey()];
+  $('#latOut').textContent = L!=null ? `Calibrated: ${Math.round(L*1000)} ms (${how})` : `Not calibrated for ${how} yet. Pocket is guessing, so results can be off.`;
+  const [a,b]=GRADES[S.strict]; $('#zoneTight').style.width=(a/0.15*50)+'%'; $('#zoneOk').style.width=(b/0.15*50)+'%';
+  renderMetroInfo();
+}
+$('#startFrom').addEventListener('change', e=>{ S.startFrom=e.target.value; savePrefs(); });
+$('#strict').addEventListener('change', e=>{ S.strict=e.target.value; renderSettings(); savePrefs(); });
+$('#songVol').addEventListener('input', e=>{ S.songVol=+e.target.value; if(run) run.gain.gain.value=S.songVol; if(pv) pv.gain.gain.value=S.songVol; savePrefs(); });
+$$('[data-metro]').forEach(b=>b.addEventListener('click', ()=>{ S.metro=b.dataset.metro; renderSettings(); renderMetroInfo(); savePrefs(); }));
+$('#metSound').addEventListener('change', e=>{ S.metSound=e.target.value; savePrefs(); previewTicks(); });
+$('#metVol').addEventListener('input', e=>{ S.metVol=+e.target.value; savePrefs(); });
+$('#metVol').addEventListener('change', ()=>previewTicks());
+$('#metroTry').addEventListener('click', ()=>previewTicks());
+// one bar at the song's tempo, so you can hear the sound and volume
+function previewTicks(){
+  const c=ac(), beat=60/S.bpm, t0=c.currentTime+0.05;
+  for(let i=0;i<S.beatsPerBar;i++) tick(t0+i*beat, i===0);
+}
+function renderMetroInfo(){
+  const el=$('#metroInfo'); if(!el) return;
+  const tr=tempoRange();
+  const lock = tr && tr[1]-tr[0] >= 1 ? `It follows the band's own beat, speeding up and slowing down with it (${tr[0].toFixed(0)}–${tr[1].toFixed(0)} BPM).`
+    : tracked() ? `It plays on the song's own beats (${S.bpm.toFixed(1)} BPM).`
+    : `It plays a fixed ${S.bpm.toFixed(1)} BPM, lined up with bar 1.`;
+  el.textContent = (S.metro==='off' ? 'Off. The lights above still show every beat. ' : S.metro==='countin' ? 'Clicks through the bar before you come in. ' : 'Clicks on every beat while you play. ') + lock + ' It reaches your ears with the same delay as the song, so it always sits on the beat.';
+}
+$('#sens').addEventListener('input', e=>{ S.sens=+e.target.value; if(mic) mic.node.port.postMessage(sensParams()); savePrefs(); });
+$('#outSpk').addEventListener('click', ()=>{ S.output='speaker'; renderSettings(); savePrefs(); if(mic) ensureMic(); });
+$('#outHp').addEventListener('click', ()=>{ S.output='headphones'; renderSettings(); savePrefs(); if(mic) ensureMic(); });
+$('#inMic').addEventListener('click', ()=>{ S.input='mic'; renderSettings(); savePrefs(); });
+$('#inTap').addEventListener('click', ()=>{ S.input='tap'; renderSettings(); savePrefs(); });
+
+/* ---------- microphone onset detection ---------- */
+const WORKLET=`
+// Strum detector. Works on the sample-to-sample difference (brings out the pick attack),
+// and fires when its fast envelope jumps well above where it was 25 ms earlier.
+// Input 1 (speaker mode) is what the phone is playing, delayed to line up with the mic.
+// A jump only counts if it is clearly louder than the song could make it (kc = learned speaker-to-mic level).
+class Onset extends AudioWorkletProcessor{
+  constructor(o){ super(); this.p=0; this.f=0; this.s=0; this.floor=1; this.last=-1; this.t0=-1;
+    this.rise=3; this.gate=1e-6; this.margin=3; this.kc=0; this.acc=0; this.cnt=0; this.sub=0;
+    this.hist=new Float32Array(64); this.hi=0;
+    this.pr=0; this.fr=0; this.m10=0; this.r10=0; this.rh=new Float32Array(64); this.r10h=new Float32Array(64); this.rmax=0; this.r10max=0;
+    this.learn=false; this.hb=new Float32Array(96); this.n=0; this.rpk=0;
+    this.kf=1-Math.exp(-1/(0.002*sampleRate)); this.ks=1-Math.exp(-1/(0.12*sampleRate)); this.k10=1-Math.exp(-1/(0.01*sampleRate));
+    this.lag=Math.min(60, Math.round(0.025*sampleRate/32)); this.win=Math.min(62, Math.round(0.04*sampleRate/32));
+    Object.assign(this, (o && o.processorOptions) || {});
+    this.port.onmessage=e=>{ const d=e.data;
+      if(d.cmd==='learnStart'){ this.learn=true; this.hb.fill(0); this.n=0; this.rpk=0; }
+      else if(d.cmd==='learnEnd') this.endLearn();
+      else Object.assign(this, d); }; }
+  // kc = 90th percentile of mic/speaker loudness while the song is clearly playing (log2 histogram),
+  // so it covers the frequencies the phone speaker carries best, not just the average.
+  quantile(){ let tot=0; for(const v of this.hb) tot+=v; let acc=0; for(let i=0;i<96;i++){ acc+=this.hb[i]; if(acc>=tot*0.9) return Math.pow(2, i*0.25-18); } return 0; }
+  endLearn(){ this.learn=false;
+    if(this.n>600){ this.kc=this.quantile(); this.port.postMessage({k:'cpl', v:this.kc, n:this.n}); }
+    else this.port.postMessage({k:'cpl', v:null, n:this.n}); }
+  process(inputs){
+    const x=inputs[0]&&inputs[0][0]; if(!x) return true;
+    const y=inputs[1]&&inputs[1][0];
+    if(this.t0<0) this.t0=currentTime;
+    if(this.learn && this.learnUntil && currentTime>=this.learnUntil) this.endLearn(); // learnUntil: for offline tests
+    for(let i=0;i<x.length;i++){
+      const d=x[i]-this.p; this.p=x[i]; const e=d*d;
+      this.f+=(e-this.f)*this.kf; this.s+=(e-this.s)*this.ks; this.m10+=(e-this.m10)*this.k10; this.acc+=x[i]*x[i];
+      if(y){ const dr=y[i]-this.pr; this.pr=y[i]; const er=dr*dr; this.fr+=(er-this.fr)*this.kf; this.r10+=(er-this.r10)*this.k10; }
+      if(this.s<this.floor) this.floor=this.s; else this.floor+=(this.s-this.floor)*2e-6;
+      if(++this.sub>=32){
+        this.sub=0; this.hist[this.hi]=this.f; this.rh[this.hi]=y?this.fr:0; this.r10h[this.hi]=y?this.r10:0; this.hi=(this.hi+1)&63;
+        let m=0, m10=0; for(let j=1;j<=this.win;j++){ const k=(this.hi-j+64)&63; if(this.rh[k]>m) m=this.rh[k]; if(this.r10h[k]>m10) m10=this.r10h[k]; }
+        this.rmax=m; this.r10max=m10;
+        if(this.learn && y){
+          this.rpk=Math.max(this.rpk*0.99995, m10);
+          if(m10>this.rpk*0.05 && m10>1e-9){ const b=Math.round((Math.log2(this.m10/m10)+18)*4); this.hb[Math.max(0,Math.min(95,b))]++; this.n++;
+            if((this.n&63)===0 && this.n>=300) this.kc=this.quantile(); }
+        }
+      }
+      const ref=this.hist[(this.hi-this.lag+64)&63];
+      if(this.f>this.gate && this.f>this.floor*6 && this.f>ref*this.rise && this.f>this.kc*this.rmax*this.margin){
+        const now=currentTime+i/sampleRate;
+        if(now-this.last>0.09 && now-this.t0>0.3){ this.last=now; this.port.postMessage({k:'on', t:now, v:this.f}); }
+      }
+    }
+    this.cnt+=x.length;
+    if(this.cnt>=2048){ this.port.postMessage({k:'lvl', v:Math.sqrt(this.acc/this.cnt)}); this.acc=0; this.cnt=0; }
+    return true;
+  }
+}
+registerProcessor('pocket-onset', Onset);`;
+let mic=null, workletReady=false;
+const sensParams=()=>({rise:4.5-S.sens*0.3, gate:1e-6*Math.pow(2, 5-S.sens), margin:1.2+(10-S.sens)*0.2});
+async function ensureMic(){
+  const c=ac();
+  const aec=S.output==='speaker';
+  if(mic && mic.aec===aec){ connectRef(); return true; }
+  if(mic){ mic.stream.getTracks().forEach(t=>t.stop()); try{ mic.src.disconnect(); mic.node.disconnect(); }catch(e){} mic=null; }
+  if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || !c.audioWorklet){
+    toast('This browser won\'t give Pocket the microphone. Open it over https in Chrome or Safari, or switch to "Tap screen".', 6000); return false;
+  }
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:aec, noiseSuppression:false, autoGainControl:false}});
+    if(!workletReady){ const url=URL.createObjectURL(new Blob([WORKLET],{type:'application/javascript'})); await c.audioWorklet.addModule(url); workletReady=true; }
+    const src=c.createMediaStreamSource(stream), node=new AudioWorkletNode(c,'pocket-onset',{numberOfInputs:2, processorOptions:Object.assign(sensParams(), {kc:coupling})}), z=c.createGain(); z.gain.value=0;
+    src.connect(node).connect(z).connect(c.destination);
+    node.port.postMessage(sensParams());
+    node.port.onmessage=e=>{ const m=e.data; if(m.k==='on') onHit(m.t, 'mic', m.v); else if(m.k==='cpl') gotCoupling(m.v); else showLevel(m.v); };
+    mic={stream, src, node, aec};
+    connectRef();
+    return true;
+  }catch(err){
+    toast('Microphone blocked. Allow the mic for this page in your browser settings, or switch to "Tap screen".', 6000); return false;
+  }
+}
+// Speaker mode: feed what the phone plays into the detector's second input, delayed to arrive with its echo in the mic.
+function connectRef(){
+  if(!mic || !refDelay) return;
+  try{ refDelay.disconnect(mic.node); }catch(e){}
+  if(S.output==='speaker'){ refDelay.delayTime.value=Math.min(1.4, Math.max(0, curLatency()-0.02)); refDelay.connect(mic.node, 0, 1); }
+}
+let cplWaiter=null;
+function gotCoupling(v){
+  if(v!=null){ coupling=v; LS.set('coupling', v); }
+  if(cplWaiter){ const w=cplWaiter; cplWaiter=null; w(v); }
+}
+let lvlSmooth=0;
+function showLevel(v){ lvlSmooth=Math.max(v, lvlSmooth*0.8); $('#lvl').style.width=Math.min(100, Math.sqrt(lvlSmooth)*220)+'%'; }
+let heardN=0;
+$('#micTest').addEventListener('click', async ()=>{ if(await ensureMic()) $('#heard').textContent='Listening. Strum a few times.'; });
+
+/* tap input */
+function tapTime(e){ return ctx.currentTime-Math.max(0,(performance.now()-e.timeStamp)/1000); }
+$('#lane').addEventListener('pointerdown', e=>{ if(S.input==='tap' && ctx && (run||cal)){ e.preventDefault(); onHit(tapTime(e), 'tap'); } });
+document.addEventListener('keydown', e=>{
+  if(e.code==='Space' && S.input==='tap' && ctx && (run||cal) && !/INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName)){ e.preventDefault(); if(!e.repeat) onHit(tapTime(e),'tap'); }
+});
+
+function onHit(ctxT, src, v){
+  if(src!==S.input) return;
+  if(cal){ calHit(ctxT); return; }
+  if(run){ runHit(ctxT, v); return; }
+  heardN++; $('#heard').textContent='Heard '+heardN+' strum'+(heardN===1?'':'s')+'. If it misses strums, raise the sensitivity; if it hears noise, lower it.';
+}
+
+/* ---------- the run ---------- */
+let run=null, wake=null;
+async function startRun(from){
+  stopPreview();
+  if(!song.buffer) return;
+  const c=ac(); await c.resume();
+  if(S.input==='mic' && !(await ensureMic())) return;
+  const part=buildPart();
+  if(!part.ev.length){ toast('Your pattern has no strums in it. Add some D or U in step 2.'); return; }
+  const playFrom = (from||S.startFrom)==='pre' ? Math.max(0, barStart(S.entryBar-2)) : 0;
+  // If the count-in bar would start before the song does (you come in on bar 1), the metronome counts you in
+  // first and the song starts after it. startPos is then a negative "song time" before the audio begins.
+  const countStart=barStart(S.entryBar-1);
+  const startPos = S.metro!=='off' ? Math.min(playFrom, countStart-0.05) : playFrom;
+  const src=c.createBufferSource(), gain=c.createGain();
+  src.buffer=song.buffer; gain.gain.value=S.songVol; src.connect(gain).connect(busNode);
+  const T0=c.currentTime+0.25; src.start(T0+(playFrom-startPos), playFrom);
+  if(mic) connectRef();
+  run={src, gain, T0, startPos, countStart, ...part, lat:curLatency(), dots:[], extras:0, early:0, nextBeat:Math.ceil(beatIdx(startPos)-1e-6), timer:0, raf:0, lastHit:null, recent:[], lit:-1, ambient:[]};
+  renderBeatLights();
+  run.learning = S.input==='mic' && S.output==='speaker' && !!mic;
+  if(run.learning) mic.node.port.postMessage({cmd:'learnStart'});
+  run.timer=setInterval(schedule, 25);
+  run.raf=requestAnimationFrame(frame);
+  $('#goBtn').textContent='Stop'; $('#goBtn').classList.add('stop');
+  $('#summary').hidden=true;
+  setNeedle(null); flashSub=null; setOrb('idle', 'Wait'); $('#trend').className='pill'; $('#trend').textContent='Waiting';
+  try{ wake=await navigator.wakeLock.request('screen'); }catch(e){ wake=null; }
+}
+function songAt(ct){ return ct-run.T0+run.startPos; }
+// Misses and the end of the run are checked here and in frame(), so the run still ends if the screen stops redrawing.
+function checkRun(){
+  const now=songAt(ctx.currentTime)-outLat();
+  // stop learning the speaker level one beat before you come in, while you are still listening
+  if(run.learning && now >= beatTime(beatIdx(run.start)-1)){ run.learning=false; mic.node.port.postMessage({cmd:'learnEnd'}); }
+  for(const e of run.ev){ if(e.t > now) break; if(!e.hit && !e.miss && now > e.t+e.win+0.25){ e.miss=true; run.dots.push({t:e.t, g:'miss'}); updateOrb(false); } }
+  if(now > run.end+G().beat*0.5 || now > song.buffer.duration){ stopRun(true); return true; }
+  return false;
+}
+function schedule(){
+  if(!run || checkRun()) return; const c=ctx, ahead=songAt(c.currentTime+0.12);
+  for(let bt=beatTime(run.nextBeat); bt<ahead; bt=beatTime(run.nextBeat)){
+    const at=run.T0+(bt-run.startPos);
+    const inCount = bt>=run.countStart-1e-4 && bt<run.start-1e-4;
+    if(at>=c.currentTime && bt<=run.end+1e-4 && (S.metro==='all' || (S.metro==='countin' && inCount)))
+      tick(at, mod(run.nextBeat, S.beatsPerBar)===0);
+    run.nextBeat++;
+  }
+}
+// A real strum is much louder than the room's small noises (typing, moving, a fan). Before the count-in Pocket
+// collects how loud those stray sounds are, and in the count-in bar only something clearly louder counts as
+// coming in early. (Taps have no loudness, so they always count.)
+function clearlyAboveRoom(v){
+  const a=run.ambient; if(v==null || a.length<3) return true;
+  const m=a.slice().sort((x,y)=>x-y)[a.length>>1]; return v >= m*3;
+}
+function runHit(ctxT, v){
+  const t=songAt(ctxT)-run.lat, ev=run.ev;
+  let lo=0, hi=ev.length; while(lo<hi){ const m=(lo+hi)>>1; if(ev[m].t<t) lo=m+1; else hi=m; }
+  let best=null, bd=1e9;
+  for(let i=Math.max(0,lo-2); i<Math.min(ev.length, lo+2); i++){ const e=ev[i]; const d=Math.abs(t-e.t); if(!e.hit && d<=e.win && d<bd){ bd=d; best=e; } }
+  if(best){
+    best.hit=true; best.miss=false; best.d=t-best.t; best.g=grade(best.d);
+    run.dots.push({t, g:best.g}); run.recent.push(best.d); if(run.recent.length>8) run.recent.shift();
+    setNeedle(best.d, best.g); updateTrend(); updateOrb(true);
+  } else if(t < run.countStart-G().bar*0.2){
+    if(v!=null){ run.ambient.push(v); if(run.ambient.length>40) run.ambient.shift(); }
+  } else if(t < run.start-0.12 && clearlyAboveRoom(v)){
+    run.early++; run.dots.push({t, g:'bad'}); flash('Wait for it', 'Bar '+S.entryBar+' is where you come in');
+  } else if(t>=run.start-0.12 && t<=run.end+0.2){
+    run.extras++; run.dots.push({t, g:'extra'});
+  }
+}
+let flashUntil=0, flashMsg=null;
+function flash(big, sub){ flashMsg={big, sub}; flashUntil=performance.now()+900; }
+function setNeedle(d, g){
+  const n=$('#needle');
+  if(d==null){ n.style.left='50%'; n.style.opacity='.25'; n.style.background=T.ink; $('#mReading').textContent='–'; return; }
+  const ms=Math.round(d*1000), x=50+Math.max(-1,Math.min(1,d/0.15))*48;
+  n.style.left=x+'%'; n.style.opacity='1'; n.style.background=T[g];
+  $('#mReading').textContent = Math.abs(ms)<=5 ? 'dead on' : Math.abs(ms)+' ms '+(ms<0?'early':'late');
+  $('#mReading').style.color=T[g];
+}
+function updateTrend(){
+  const r=run.recent, el=$('#trend'); if(r.length<4){ el.className='pill'; el.textContent='Listening…'; return; }
+  const mean=r.reduce((a,b)=>a+b,0)/r.length, sd=Math.sqrt(r.reduce((a,b)=>a+(b-mean)**2,0)/r.length);
+  const [tight]=GRADES[S.strict];
+  if(mean<-tight*0.7){ el.className='pill bad'; el.textContent='Rushing · '+Math.round(-mean*1000)+' ms ahead'; }
+  else if(mean>tight*0.7){ el.className='pill bad'; el.textContent='Dragging · '+Math.round(mean*1000)+' ms behind'; }
+  else if(sd>tight*1.4){ el.className='pill warn'; el.textContent='Uneven, steady it'; }
+  else { el.className='pill good'; el.textContent='Locked in'; }
+}
+function frame(){
+  if(!run) return;
+  const c=ctx, g=G(), now=songAt(c.currentTime)-outLat();
+  if(checkRun()) return;
+  // status
+  const big=$('#stBig'), eb=$('#stEyebrow'), sub=$('#stSub');
+  big.className='stbig';
+  if(performance.now()<flashUntil && flashMsg){ big.textContent=flashMsg.big; big.classList.add('alert'); sub.textContent=flashMsg.sub; eb.textContent='Too early'; }
+  else if(now < run.countStart){
+    const barsLeft=Math.max(1, (S.entryBar-1)-barAt(now));
+    eb.textContent = now<barStart(1)-0.02 ? 'Intro' : 'Bar '+barAt(now)+' · listen';
+    big.textContent='Come in at bar '+S.entryBar;
+    sub.textContent = barsLeft===1 ? 'Count-in starts next bar' : barsLeft+' bars until the count-in';
+  } else if(now < run.start){
+    const left=Math.ceil(beatIdx(run.start)-beatIdx(now)-1e-6);
+    eb.textContent='Get ready'; big.textContent=String(left); big.classList.add('count'); sub.textContent='Come in on the next "1"';
+  } else if(now < beatTime(beatIdx(run.start)+1)){
+    eb.textContent='Bar '+S.entryBar; big.textContent='Go!'; big.classList.add('go'); sub.textContent='';
+  } else if(now <= run.end){
+    const bar=barAt(now), done=bar-S.entryBar+1;
+    eb.textContent='Bar '+bar+' · '+done+' of '+run.nBars; big.textContent=String(beatInBar(now));
+    sub.textContent=flashSub||'';
+  } else { eb.textContent='Done'; big.textContent='Nice'; sub.textContent=''; }
+  const ch=chordAt(Math.max(now, run.start)), nx=nextChord(now);
+  const chTxt = now>=run.countStart ? (ch||'–') : '–', chEl=$('#chordNow');
+  if(chEl.textContent!==chTxt){ chEl.textContent=chTxt; chEl.style.fontSize = chTxt.length<=2 ? '' : chTxt.length<=4 ? '2.3rem' : '1.6rem'; }
+  if(now < run.start) setOrb('idle', now < run.countStart ? 'Wait' : 'Get ready');
+  // beat lights: the visual metronome
+  const k=Math.floor(beatIdx(now)+1e-6); if(k!==run.lit){ run.lit=k; litBeat(mod(k, S.beatsPerBar)); }
+  $('#chordNext').textContent = nx||'–';
+  drawLane(now);
+  run.raf=requestAnimationFrame(frame);
+}
+function nextChord(now){
+  const cb=parseChords(S.chords); if(!cb.length) return null;
+  const cur=chordAt(Math.max(now, run ? run.start : now)), k0=Math.ceil(beatIdx(Math.max(now, barStart(S.entryBar)))-1e-6);
+  for(let k=k0; k<k0+S.beatsPerBar*cb.length*2+1; k++){ const t=beatTime(k)+1e-4, c=chordAt(t); if(c && (c!==cur || now<barStart(S.entryBar))) return c; }
+  return cur;
+}
+function renderBeatLights(){
+  const el=$('#beatLights'); if(el.children.length===S.beatsPerBar) { [...el.children].forEach(s=>s.classList.remove('on')); return; }
+  el.innerHTML=Array.from({length:S.beatsPerBar},(_,i)=>`<span${i===0?' class="one"':''}></span>`).join('');
+}
+function litBeat(i){ [...$('#beatLights').children].forEach((s,j)=>s.classList.toggle('on', j===i)); }
+/* timing light: average of the last 6 strums you were due to play (misses count as 0) */
+const ORB_WORD={idle:'Wait', perfect:'Perfect', good:'Good', ok:'Off time', bad:'Restart'};
+function setOrb(state, word){
+  const o=$('#orb'); if(o.dataset.state!==state) o.dataset.state=state;
+  const w=word||ORB_WORD[state]; if($('#orbWord').textContent!==w) $('#orbWord').textContent=w;
+  o.setAttribute('aria-label', 'Timing: '+w+(state==='bad' ? '. Tap to restart from 2 bars before you come in' : ''));
+}
+function orbState(){
+  const judged=run.ev.filter(e=>e.hit||e.miss), last=judged.slice(-6);
+  if(last.length<2) return 'idle';
+  const pts={perfect:3, good:2, warn:1, bad:0};
+  const avg=last.reduce((a,e)=>a+(e.hit ? pts[e.g] : 0),0)/last.length;
+  if(avg>=2.5) return 'perfect';
+  if(avg>=1.7) return 'good';
+  if(avg>=0.9 || last.length<4) return 'ok';
+  return 'bad';
+}
+function updateOrb(pulse){
+  if(!run) return;
+  const st=orbState(); setOrb(st, st==='idle' ? 'Listening' : null);
+  if(st==='bad') flashSub='Way off the beat. Tap the red circle to restart from 2 bars before you come in.';
+  else flashSub=null;
+  if(pulse && !matchMedia('(prefers-reduced-motion: reduce)').matches){ const o=$('#orb'); o.classList.remove('pulse'); void o.offsetWidth; o.classList.add('pulse'); }
+}
+let flashSub=null;
+$('#orb').addEventListener('click', ()=>{
+  if($('#orb').dataset.state!=='bad' || cal || !song.buffer) return;
+  if(run) stopRun(false);
+  startRun('pre');
+});
+function stopRun(showSummary){
+  if(!run) return;
+  if(run.learning && mic){ run.learning=false; mic.node.port.postMessage({cmd:'learnEnd'}); }
+  try{ run.src.stop(); }catch(e){}
+  clearInterval(run.timer); cancelAnimationFrame(run.raf);
+  const r=run; run=null;
+  $('#goBtn').textContent='Start again'; $('#goBtn').classList.remove('stop');
+  try{ wake && wake.release(); }catch(e){} wake=null;
+  if(showSummary) summarize(r);
+  [...$('#beatLights').children].forEach(s=>s.classList.remove('on'));
+  $('#stEyebrow').textContent='Stopped'; $('#stBig').className='stbig'; $('#stBig').textContent = showSummary ? 'Done' : 'Press start'; $('#stSub').textContent = $('#orb').dataset.state==='bad' ? 'Tap the red circle to try again from 2 bars before you come in.' : '';
+}
+$('#goBtn').addEventListener('click', ()=>{ if(cal) return; if(run) stopRun(true); else startRun(); });
+
+/* ---------- lane drawing ---------- */
+function drawLaneIdle(){
+  if(run || !song.buffer || $('#step-play').style.display==='none') return;
+  const part=buildPart(); drawLane(part.start-G().beat*1.5, part);
+}
+function arrow(c, x, y, s, dir){
+  c.beginPath();
+  if(dir==='D'){ c.moveTo(x-s, y-s*0.4); c.lineTo(x+s, y-s*0.4); c.lineTo(x, y+s); }
+  else { c.moveTo(x-s, y+s*0.4); c.lineTo(x+s, y+s*0.4); c.lineTo(x, y-s); }
+  c.closePath();
+}
+function drawLane(now, partArg){
+  const P=partArg||run; if(!P) return;
+  const cv=$('#lane'), {c,w,h}=fit(cv), g=G();
+  const pps=Math.max(60, (w*0.72)/(g.bar*1.6)), headX=w*0.22, X=t=>headX+(t-now)*pps;
+  const t0=now-headX/pps, t1=now+(w-headX)/pps;
+  c.clearRect(0,0,w,h);
+  const mono=getComputedStyle(document.body).getPropertyValue('--f-mono'), body=getComputedStyle(document.body).getPropertyValue('--f-body');
+  // part range
+  c.fillStyle=T['amber-soft']; const ps=Math.max(X(P.start),0), pe=Math.min(X(P.end),w); if(pe>ps) c.fillRect(ps, 22, pe-ps, h-22);
+  // beats and bars
+  let k=Math.floor(beatIdx(t0));
+  for(let bt=beatTime(k); bt<=t1; k++, bt=beatTime(k)){
+    const x=X(bt), isBar=mod(k, S.beatsPerBar)===0;
+    c.fillStyle=isBar ? T.muted : T.line; c.fillRect(Math.round(x), 22, isBar?2:1, h-22);
+    if(isBar){ const n=Math.round(k/S.beatsPerBar)+1; c.fillStyle=T.muted; c.font='500 11px '+mono; c.textBaseline='top'; c.fillText(String(n), x+4, 26); }
+  }
+  // chords on bar starts within the part
+  c.font='700 15px '+body; c.textBaseline='alphabetic';
+  let last=null;
+  for(let kk=Math.max(Math.ceil(beatIdx(P.start)-1e-6), Math.floor(beatIdx(t0))); ; kk++){
+    const t=beatTime(kk); if(t>Math.min(t1, P.end-1e-6)) break;
+    const ch=chordAt(t+1e-4); if(ch && ch!==last){ c.fillStyle=T.ink; c.fillText(ch, X(t)+4, 17); } last=ch;
+  }
+  // entry flag
+  const ex=X(P.start);
+  if(ex>-40 && ex<w){ c.fillStyle=T.amber; c.fillRect(ex-1, 0, 3, h); c.font='700 11px '+body; c.fillText('IN', ex+5, h-8); }
+  // strums
+  const ly=22+(h-22)*0.42;
+  for(const e of P.ev){
+    if(e.t<t0-0.2) continue; if(e.t>t1+0.2) break;
+    const x=X(e.t), col = e.hit ? T[e.g] : e.miss ? T.bad : T.ink;
+    if(e.c==='X'){ c.strokeStyle=col; c.lineWidth=3; c.beginPath(); c.moveTo(x-8,ly-8); c.lineTo(x+8,ly+8); c.moveTo(x+8,ly-8); c.lineTo(x-8,ly+8); c.stroke(); }
+    else { arrow(c, x, ly, 10, e.c); if(e.miss){ c.strokeStyle=col; c.lineWidth=2; c.stroke(); } else { c.fillStyle=col; c.fill(); } }
+  }
+  // what you played
+  const dy=22+(h-22)*0.8;
+  if(run) for(const d of run.dots){
+    if(d.g==='miss') continue; const x=X(d.t); if(x<-10||x>w+10) continue;
+    c.beginPath(); c.arc(x, dy, d.g==='extra'?4:6, 0, Math.PI*2);
+    if(d.g==='extra'){ c.strokeStyle=T.muted; c.lineWidth=1.5; c.stroke(); } else { c.fillStyle=T[d.g]; c.fill(); }
+  }
+  // label on its own backing so passing dots don't run through it
+  c.font='500 10px '+mono; c.fillStyle=T.lane; c.fillRect(0, dy-9, c.measureText('YOU').width+12, 18);
+  c.fillStyle=T.muted; c.fillText('YOU', 6, dy+4);
+  // playhead
+  c.fillStyle=T.amber; c.fillRect(headX-1, 22, 2, h-22);
+  c.beginPath(); c.moveTo(headX-6,22); c.lineTo(headX+6,22); c.lineTo(headX,30); c.closePath(); c.fill();
+}
+
+/* ---------- summary ---------- */
+function summarize(r){
+  const ev=r.ev.filter(e=>e.t<=songAtSafe(r)), n=ev.length; if(!n) return;
+  const hit=ev.filter(e=>e.hit), good=hit.filter(e=>onTime(e.g)).length, perfect=hit.filter(e=>e.g==='perfect').length;
+  const ds=hit.map(e=>e.d), mean=ds.length ? ds.reduce((a,b)=>a+b,0)/ds.length : 0;
+  const sd=ds.length ? Math.sqrt(ds.reduce((a,b)=>a+(b-mean)**2,0)/ds.length) : 0;
+  const [tight]=GRADES[S.strict];
+  const lean = !ds.length ? '–' : mean<-tight*0.5 ? 'Rushing' : mean>tight*0.5 ? 'Dragging' : 'Centered';
+  $('#sumHead').textContent = !hit.length ? 'Pocket didn\'t hear you' : good/n>=0.8 ? 'In the pocket' : good/n>=0.5 ? 'Getting there' : 'Keep at it';
+  $('#sumStats').innerHTML=[
+    [Math.round(good/n*100)+'%', 'strums on time'],
+    [Math.round(perfect/n*100)+'%', 'perfect (blue)'],
+    [hit.length+' / '+n, 'strums heard'],
+    [(mean>=0?'+':'')+Math.round(mean*1000)+' ms', lean+' on average'],
+    ['±'+Math.round(sd*1000)+' ms', 'how steady (lower is better)'],
+  ].map(([v,k])=>`<div class="stat"><div class="v mono">${v}</div><div class="k">${k}</div></div>`).join('');
+  // worst bars
+  const byBar={}; ev.forEach(e=>{ const b=byBar[e.bar]||(byBar[e.bar]={n:0,bad:0}); b.n++; if(!e.hit||!onTime(e.g)) b.bad++; });
+  const worst=Object.entries(byBar).filter(([,b])=>b.bad>0).sort((a,b)=>b[1].bad/b[1].n-a[1].bad/a[1].n).slice(0,3);
+  const tips=[];
+  if(r.early) tips.push(`You came in early ${r.early} time${r.early>1?'s':''}. Wait for the count-in to finish and start on the "1".`);
+  if(lean==='Rushing') tips.push('You tend to play ahead of the beat. Set the metronome to "Whole song" and sit back on the clicks.');
+  if(lean==='Dragging') tips.push('You tend to play behind the beat. Listen for the snare and aim to land with it, not after it.');
+  if(worst.length) tips.push('Bars to work on: '+worst.map(([b])=>b).join(', ')+'. Set "Start from" to 2 bars before and loop the tricky spot.');
+  if(r.extras>n*0.3) tips.push(S.output==='speaker'
+    ? 'Pocket heard a lot of extra sounds, probably the song through the speaker. Turn the song down a little, point the speaker away from the guitar, or calibrate again with the phone where it sits.'
+    : 'Pocket heard a lot of extra sounds. Lower the mic sensitivity, or check the song is going to your headphones and not the speaker.');
+  if(latency[latKey()]==null) tips.push('Calibrate the phone delay below to make these numbers accurate.');
+  $('#sumTips').innerHTML=tips.map(t=>`<p style="margin-top:6px">${esc(t)}</p>`).join('');
+  $('#summary').hidden=false;
+  requestAnimationFrame(()=>drawSummary(r, ev));
+}
+function songAtSafe(r){ return ctx ? ctx.currentTime-r.T0+r.startPos : r.end; }
+function drawSummary(r, ev){
+  const {c,w,h}=fit($('#sumChart')), pad=34, top=8, bot=h-18, mid=(top+bot)/2, lim=0.15;
+  const X=t=>pad+(t-r.start)/Math.max(0.001, r.end-r.start)*(w-pad-6), Y=d=>mid+Math.max(-1,Math.min(1,d/lim))*(bot-top)/2;
+  const [tight]=GRADES[S.strict], mono=getComputedStyle(document.body).getPropertyValue('--f-mono');
+  c.clearRect(0,0,w,h);
+  c.fillStyle=T.good; c.globalAlpha=0.15; c.fillRect(pad, Y(-tight), w-pad-6, Y(tight)-Y(-tight)); c.globalAlpha=1;
+  c.fillStyle=T.muted; c.font='500 10px '+mono; c.textBaseline='middle';
+  [[-0.1,'-100'],[0,'0'],[0.1,'+100']].forEach(([d,l])=>{ c.fillText(l, 2, Y(d)); c.fillStyle=T.line; c.fillRect(pad, Math.round(Y(d)), w-pad-6, 1); c.fillStyle=T.muted; });
+  c.fillText('late', 2, top+4); c.fillText('early', 2, bot-4);
+  for(let b=0;b<=r.nBars;b+=Math.max(1,Math.ceil(r.nBars/12))){ const x=X(barStart(S.entryBar+b)); c.fillStyle=T.line; c.fillRect(x, top, 1, bot-top); c.fillStyle=T.muted; c.fillText(String(S.entryBar+b), x-4, h-7); }
+  for(const e of ev){
+    if(e.hit){ c.fillStyle=T[e.g]; c.beginPath(); c.arc(X(e.t), Y(e.d), 3.5, 0, Math.PI*2); c.fill(); }
+    else { c.fillStyle=T.bad; c.fillRect(X(e.t)-1, bot-8, 2, 8); }
+  }
+}
+
+/* ---------- calibration ---------- */
+// Speaker mode tries a loopback first: Pocket times its own clicks through the speaker into the mic,
+// which measures the delay exactly. (How loud the speaker is in the mic is learned during each song's intro.)
+// If the phone's echo cancelling removes the clicks, it falls back to you strumming along.
+let cal=null;
+const median=a=>{ const d=a.slice().sort((x,y)=>x-y); return d[Math.floor(d.length/2)]; };
+function calPhase(n, kind){
+  return new Promise(res=>{
+    const c=ctx, beat=60/90, T0=c.currentTime+0.6, clicks=[];
+    for(let i=0;i<n;i++){ const at=T0+i*beat; clicks.push(at); click(at, i%4===0, 0.6); }
+    cal={clicks, deltas:[], kind};
+    if(kind==='loop') mic.node.port.postMessage({margin:0}); // let the clicks through: they are what we are timing
+    const end=T0+n*beat+0.45;
+    const iv=setInterval(()=>{
+      const i=Math.floor((c.currentTime-T0)/beat);
+      $('#stEyebrow').textContent='Calibrating'; $('#stBig').className='stbig count';
+      if(kind==='loop'){ $('#stBig').textContent='Shh'; $('#stSub').textContent="Don't play. Pocket is timing its own clicks through the speaker."; }
+      else { $('#stBig').textContent = i<0 ? 'Ready' : String(Math.min(n,i+1)); $('#stSub').textContent=(S.input==='mic'?'Strum':'Tap')+' exactly on each click · heard '+cal.deltas.length; }
+      if(c.currentTime>end){
+        clearInterval(iv);
+        const d=cal.deltas; cal=null;
+        if(kind==='loop') mic.node.port.postMessage(sensParams());
+        res(d);
+      }
+    }, 50);
+  });
+}
+$('#calBtn').addEventListener('click', async ()=>{
+  if(cal || run) return;
+  stopPreview();
+  const c=ac(); await c.resume();
+  if(S.input==='mic' && !(await ensureMic())) return;
+  goStep('play'); $('#calBtn').textContent='Listening…'; $('#calBtn').disabled=true;
+  try{
+    if(S.input==='mic' && S.output==='speaker'){
+      const d=await calPhase(6, 'loop');
+      if(d.length>=4){
+        const med=median(d), mad=median(d.map(x=>Math.abs(x-med)));
+        if(mad<0.006) return calDone(med, 0, 'auto');
+      }
+    }
+    const d=await calPhase(16, 'strum');
+    if(d.length<8){ $('#stEyebrow').textContent='Calibration'; $('#stBig').className='stbig'; $('#stBig').textContent='Try again'; $('#stSub').textContent=`Heard ${d.length} of 16 clicks. ${S.input==='mic'?'Strum louder or raise the sensitivity.':'Tap on every click.'}`; return; }
+    const med=median(d), mad=median(d.map(x=>Math.abs(x-med)));
+    calDone(med, mad, 'strum');
+  } finally { $('#calBtn').textContent='Calibrate'; $('#calBtn').disabled=false; connectRef(); }
+});
+function calHit(t){
+  let best=null, bd=1e9; for(const ck of cal.clicks){ const d=t-ck; if(d>-0.1 && d<0.45 && Math.abs(d)<Math.abs(bd)){ bd=d; best=ck; } }
+  if(best!=null){ cal.deltas.push(bd); cal.clicks=cal.clicks.filter(x=>x!==best); }
+}
+function calDone(med, mad, how){
+  latency[latKey()]=med; LS.set('latency', latency); renderSettings(); connectRef();
+  $('#stBig').className='stbig';
+  $('#stEyebrow').textContent='Calibrated'; $('#stBig').textContent=Math.round(med*1000)+' ms';
+  $('#stSub').textContent = how==='auto' ? 'Measured from the speaker by itself. Saved.'
+    : mad>0.03 ? `Your strums were spread out (±${Math.round(mad*1000)} ms). Run it again for a steadier reading.`
+    : 'Saved. Pocket subtracts this delay from everything it hears.';
+}
+
+/* ---------- boot ---------- */
+renderSettings();
+loadDemo().then(()=>{ drawWave(); });
+try{ document.fonts.ready.then(()=>{ drawWave(); drawLaneIdle(); }); }catch(e){}
+</script>
+</body>
+</html>
