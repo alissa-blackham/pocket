@@ -897,10 +897,14 @@ const PRESETS=[
   {name:'Push', p:'D-D-DU-U', bpb:4, sub:2},
   {name:'Waltz', p:'D-DUDU', bpb:3, sub:2},
   {name:'Sixteenth groove', p:'D--UD-DU-UD-DUDU', bpb:4, sub:4},
+  {name:'Riptide', p:'D-DU-UDU', bpb:4, sub:2, chords:'Am | G | C | C'},
+  {name:'Stand By Me', p:'D-D-DUDU', bpb:4, sub:2, chords:'A | A | F#m | F#m | D | E | A | A'},
+  {name:'Country Roads', p:'D-DU-UDU', bpb:4, sub:2, chords:'G | Em | D | C'},
 ];
 $('#presets').innerHTML=PRESETS.map((p,i)=>`<button class="chip" data-preset="${i}">${p.name}</button>`).join('');
 $$('[data-preset]').forEach(b=>b.addEventListener('click', ()=>{ const p=PRESETS[+b.dataset.preset]; S.pattern=p.p; S.beatsPerBar=p.bpb; S.subdiv=p.sub; refreshAll(); savePrefs(); }));
-
+S.subdiv=p.sub; if(p.chords) S.chords=p.chords;
+  
 function countLabels(){
   const sub={2:['&'],3:['trip','let'],4:['e','&','a']}[S.subdiv]||[];
   const out=[]; for(let b=1;b<=S.beatsPerBar;b++){ out.push(String(b)); sub.forEach(s=>out.push(s)); } return out;
